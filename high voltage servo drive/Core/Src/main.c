@@ -76,7 +76,8 @@ static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_UART4_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void PWM_Init(void);
+static void PWM_Enable(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -114,34 +115,29 @@ int main(void)
   MX_GPIO_Init();
   MX_ADC1_Init();
   MX_DFSDM2_Init();
-  MX_TIM1_Init();
+//  MX_TIM1_Init();
   MX_TIM3_Init();
   MX_TIM4_Init();
   MX_UART4_Init();
   /* USER CODE BEGIN 2 */
-
+  PWM_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  PWM_Enable();
 
+  HAL_DFSDM_FilterRegularStart(&hdfsdm2_filter0);
+//  DFSDM_RegConvStart(hdfsdm2_filter0);
 
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 2048);
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 2048);
-  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 2048);
+  TIM1->CCR1 = 256;
 
   while (1)
   {
 
-
-
-	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-	  HAL_Delay(500);
-
+  	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+  	  HAL_Delay(100);
 
     /* USER CODE END WHILE */
 
@@ -260,10 +256,10 @@ static void MX_DFSDM2_Init(void)
   /* USER CODE END DFSDM2_Init 1 */
   hdfsdm2_filter0.Instance = DFSDM2_Filter0;
   hdfsdm2_filter0.Init.RegularParam.Trigger = DFSDM_FILTER_SW_TRIGGER;
-  hdfsdm2_filter0.Init.RegularParam.FastMode = DISABLE;
+  hdfsdm2_filter0.Init.RegularParam.FastMode = ENABLE;
   hdfsdm2_filter0.Init.RegularParam.DmaMode = DISABLE;
-  hdfsdm2_filter0.Init.FilterParam.SincOrder = DFSDM_FILTER_FASTSINC_ORDER;
-  hdfsdm2_filter0.Init.FilterParam.Oversampling = 1;
+  hdfsdm2_filter0.Init.FilterParam.SincOrder = DFSDM_FILTER_SINC3_ORDER;
+  hdfsdm2_filter0.Init.FilterParam.Oversampling = 256;
   hdfsdm2_filter0.Init.FilterParam.IntOversampling = 1;
   if (HAL_DFSDM_FilterInit(&hdfsdm2_filter0) != HAL_OK)
   {
@@ -273,8 +269,8 @@ static void MX_DFSDM2_Init(void)
   hdfsdm2_filter1.Init.RegularParam.Trigger = DFSDM_FILTER_SW_TRIGGER;
   hdfsdm2_filter1.Init.RegularParam.FastMode = DISABLE;
   hdfsdm2_filter1.Init.RegularParam.DmaMode = DISABLE;
-  hdfsdm2_filter1.Init.FilterParam.SincOrder = DFSDM_FILTER_FASTSINC_ORDER;
-  hdfsdm2_filter1.Init.FilterParam.Oversampling = 1;
+  hdfsdm2_filter1.Init.FilterParam.SincOrder = DFSDM_FILTER_SINC3_ORDER;
+  hdfsdm2_filter1.Init.FilterParam.Oversampling = 256;
   hdfsdm2_filter1.Init.FilterParam.IntOversampling = 1;
   if (HAL_DFSDM_FilterInit(&hdfsdm2_filter1) != HAL_OK)
   {
@@ -284,8 +280,8 @@ static void MX_DFSDM2_Init(void)
   hdfsdm2_filter2.Init.RegularParam.Trigger = DFSDM_FILTER_SW_TRIGGER;
   hdfsdm2_filter2.Init.RegularParam.FastMode = DISABLE;
   hdfsdm2_filter2.Init.RegularParam.DmaMode = DISABLE;
-  hdfsdm2_filter2.Init.FilterParam.SincOrder = DFSDM_FILTER_FASTSINC_ORDER;
-  hdfsdm2_filter2.Init.FilterParam.Oversampling = 1;
+  hdfsdm2_filter2.Init.FilterParam.SincOrder = DFSDM_FILTER_SINC3_ORDER;
+  hdfsdm2_filter2.Init.FilterParam.Oversampling = 256;
   hdfsdm2_filter2.Init.FilterParam.IntOversampling = 1;
   if (HAL_DFSDM_FilterInit(&hdfsdm2_filter2) != HAL_OK)
   {
@@ -301,7 +297,7 @@ static void MX_DFSDM2_Init(void)
   hdfsdm2_channel1.Init.SerialInterface.Type = DFSDM_CHANNEL_SPI_RISING;
   hdfsdm2_channel1.Init.SerialInterface.SpiClock = DFSDM_CHANNEL_SPI_CLOCK_INTERNAL;
   hdfsdm2_channel1.Init.Awd.FilterOrder = DFSDM_CHANNEL_FASTSINC_ORDER;
-  hdfsdm2_channel1.Init.Awd.Oversampling = 1;
+  hdfsdm2_channel1.Init.Awd.Oversampling = 32;
   hdfsdm2_channel1.Init.Offset = 0;
   hdfsdm2_channel1.Init.RightBitShift = 0x00;
   if (HAL_DFSDM_ChannelInit(&hdfsdm2_channel1) != HAL_OK)
@@ -383,7 +379,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 65535;
+  htim1.Init.Period = 1023;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -641,6 +637,50 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+static void PWM_Init(void){
+
+	RCC->AHB1ENR 	|= RCC_AHB1ENR_GPIOAEN;	// Enable GPIOA Clock
+	RCC->AHB1ENR 	|= RCC_AHB1ENR_GPIOBEN;	// Enable GPIOB Clock
+	RCC->APB2ENR 	|= RCC_APB2ENR_TIM1EN;	// Enable TIM1 Clock
+
+	GPIOA->MODER	|= (0x2 << (2*8));		// Set PA8 to alternate function mode
+	GPIOA->AFR[1]	|= (0x1 << (4*(8-8)));	// Set PA8's alternate function
+
+	GPIOB->MODER	|= (0x2 << (2*13));		// Set PB13 to alternate function mode
+	GPIOB->AFR[1]	|= (0x1 << (4*(13-8)));	// Set PB13's alternate function
+
+//	TIM1->CR1	= 0x0000;
+//	TIM1->CR2	= 0x0000;
+//	TIM1->DIER	= 0x0000;
+//	TIM1->SR	= 0x0000;
+//	TIM1->EGR	= 0x0000;
+	TIM1->CCMR1	= 0x6868;
+	TIM1->CCMR2	= 0x0068;
+	TIM1->CCER	= 0x0555;
+//	TIM1->CNT	= 0x0000;
+	TIM1->PSC	= 0x0000;	// Prescaler
+	TIM1->ARR	= 0x03ff;	// Period
+//	TIM1->RCR	= 0x0000;
+//	TIM1->CCR1	= 0x0000;
+//	TIM1->CCR2	= 0x0000;
+//	TIM1->CCR2	= 0x0000;
+//	TIM1->CCR3	= 0x0000;
+//	TIM1->CCR4	= 0x0000;
+	TIM1->BDTR	= 0xa001;
+//	TIM1->DCR	= 0x0000;
+//	TIM1->DMAR	= 0x0000;
+
+
+
+}
+
+static void PWM_Enable(void){
+
+	TIM1->CR1	|= 0x0001;
+
+}
+
 
 /* USER CODE END 4 */
 
