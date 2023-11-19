@@ -57,13 +57,14 @@ DFSDM_Channel_HandleTypeDef hdfsdm2_channel2;
 DFSDM_Channel_HandleTypeDef hdfsdm2_channel3;
 
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart4;
 
 /* USER CODE BEGIN PV */
-
+uint32_t dfsdmValue = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -75,6 +76,7 @@ static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_UART4_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 static void PWM_Init(void);
 static void PWM_Enable(void);
@@ -115,12 +117,14 @@ int main(void)
   MX_GPIO_Init();
   MX_ADC1_Init();
   MX_DFSDM2_Init();
-//  MX_TIM1_Init();
+  MX_TIM1_Init();
   MX_TIM3_Init();
   MX_TIM4_Init();
   MX_UART4_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   PWM_Init();
+  HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -129,7 +133,6 @@ int main(void)
   PWM_Enable();
 
   HAL_DFSDM_FilterRegularStart(&hdfsdm2_filter0);
-//  DFSDM_RegConvStart(hdfsdm2_filter0);
 
   TIM1->CCR1 = 256;
 
@@ -440,6 +443,51 @@ static void MX_TIM1_Init(void)
 }
 
 /**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 65536-1;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 244;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -679,6 +727,34 @@ static void PWM_Enable(void){
 
 	TIM1->CR1	|= 0x0001;
 
+}
+
+
+void TransmitDFSDMValue() {
+    uint8_t dataToSend[4];
+    // Assuming dfsdmValue is int32_t, you should send the bytes of this integer
+    dataToSend[0] = (uint8_t)(dfsdmValue >> 24);
+    dataToSend[1] = (uint8_t)(dfsdmValue >> 16);
+    dataToSend[2] = (uint8_t)(dfsdmValue >> 8);
+    dataToSend[3] = (uint8_t)dfsdmValue;
+//    dataToSend[0] = 't';
+//    dataToSend[1] = 'e';
+//    dataToSend[2] = 's';
+//    dataToSend[3] = 't';
+
+    // Transmit the data over UART4
+//    HAL_UART_Transmit(&huart4, dataToSend, sizeof(dataToSend), HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart4, dataToSend, 4, HAL_MAX_DELAY);
+}
+
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+    if (htim->Instance == TIM2) { // Check if the interrupt came from TIM2
+        // Get the regular value of DFSDM filter
+        HAL_DFSDM_FilterGetRegularValue(&hdfsdm2_filter0, &dfsdmValue);
+        // Transmit the value over UART
+        TransmitDFSDMValue();
+    }
 }
 
 
