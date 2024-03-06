@@ -88,6 +88,8 @@ void GPIO_init(){
 	GPIOB->AFR[1] |= 1 << (4 * (15 - 8));	// Set WL  (PB15) AF to TIM1_CH3N
 	GPIOB->AFR[1] |= 1 << (4 * (12 - 8));	// Set STO (PB12) AF to TIM1_BKIN
 
+	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED10_1;
+
 }
 
 void TIM1_init(){
@@ -96,11 +98,13 @@ void TIM1_init(){
 	TIM1->BDTR |= deadtime_ticks & TIM_BDTR_DTG;
 	TIM1->BDTR |= TIM_BDTR_AOE;
 	TIM1->BDTR |= TIM_BDTR_BKP;
-	TIM1->BDTR |= TIM_BDTR_BKE;
+	__NOP();__NOP();__NOP();		// Inserts a delay of 3 clock cycles
+	TIM1->BDTR |= TIM_BDTR_BKE;		// Enable Brake (Safe Torque Off)
+	__NOP();__NOP();__NOP();		// Inserts a delay of 3 clock cycles
 
-	TIM1->CR1 |= TIM_CR1_CMS;           // Set center-aligned mode
-	TIM1->CR1 |= TIM_CR1_ARPE;			// Enable Auto-reload preload
-	TIM1->ARR = 500*SYSCLK/PWMCLK;   // Auto-reload value for PWM frequency
+	TIM1->CR1 |= TIM_CR1_CMS;     	// Set center-aligned mode
+	TIM1->CR1 |= TIM_CR1_ARPE;		// Enable Auto-reload preload
+	TIM1->ARR = 500*SYSCLK/PWMCLK;  // Auto-reload value for PWM frequency
 
 	TIM1->CCMR1 |= TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2; // PWM mode 1 on Channel 1
 	TIM1->CCMR1 |= TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2; // PWM mode 1 on Channel 2
@@ -111,7 +115,10 @@ void TIM1_init(){
 	TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE; // Enable CH1 and CH1N
 
 	TIM1->DIER |= TIM_DIER_UIE; // Enable Update Interrupt
+	
 	NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
+	NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 1); // Set priority as needed
+	__enable_irq();
 }
 
 void TIM2_init(){
