@@ -6,6 +6,8 @@
 #define DEADTIME	100		// (ns)  PWM Deadtime (ns)
 #define PWMCLK		25		// (KHz) PWM Output Frequency
 
+#define PWM_ticks 1000*SYSCLK/PWMCLK/2
+
 #define ADC_VOLTAGE 0.25
 #define ADC_MIN_VALUE_PERC 0.1094
 #define DFSDM_DIVISIONS 8388608
@@ -19,6 +21,11 @@ float Ki = 0;		// Integral gain for current controller (V/A/s)
 float I_Term = 0;					// Integral term for current controller (V)
 
 float RI_U = 1;
+
+// DO NOT MODIFY THESE OUTSIDE OF ISR FUNCTION
+uint32_t CAPTURE_COMP_U = PWM_ticks * 0.5;
+uint32_t CAPTURE_COMP_V = PWM_ticks * 0.5;
+uint32_t CAPTURE_COMP_W = PWM_ticks * 0.5;
 
 
 void delay_us(uint32_t time_us) {
@@ -130,9 +137,6 @@ void TIM2_init(){
 
 void PWM_enable(){
 
-	//TODO:
-
-	uint32_t PWM_ticks = 1000*SYSCLK/PWMCLK/2;
 	TIM1->CCR1 = PWM_ticks * 0.5;
 	TIM1->CCR2 = PWM_ticks * 0.5;
 	TIM1->CCR3 = PWM_ticks * 0.5;
@@ -140,6 +144,10 @@ void PWM_enable(){
 	TIM1->CNT = 0;					// Resest PWM counter
 	TIM1->CR1 |= TIM_CR1_CEN;		// Enable PWM timer TIM1
 	TIM1->BDTR |= TIM_BDTR_MOE;     // Main output enable (for advanced timers)
+
+	// Start DFSDM ADC conversions
+	DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 1 Conversion
+	// others go here...
 }
 
 
@@ -216,19 +224,27 @@ float Current_Controller(float EI){
 
 void TIM1_UP_TIM10_IRQHandler(void) {
     if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
-        TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
+		TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
+		
+		if(!(DFSDM2_Filter1->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
+			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
+			return;
+		}
 
+		// set pwm exactly on edge based on data from last cycle
+		TIM1->CCR1 = CAPTURE_COMP_U;
+
+
+		// get conversion data from DFSDM
+		int32_t MI_U_Raw = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00)) / 0x100;
+		// other channels...
+
+		// start all conversions for next cycle
         // TODO: Ensure DFSDM conversions occur on PWM timer direction flips
 		DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 1 Conversion
 //		DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 2 Conversion
 //		DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 3 Conversion
 
-		//TODO: DFSDM conversion update timeout + error log
-		while(!(DFSDM2_Filter1->FLTISR & DFSDM_FLTISR_REOCF));	// wait for filter 1 conversion complete
-//		while(!(DFSDM2_Filter2->FLTISR & DFSDM_FLTISR_REOCF));	// wait for filter 2 conversion complete
-//		while(!(DFSDM2_Filter3->FLTISR & DFSDM_FLTISR_REOCF));	// wait for filter 3 conversion complete
-
-		int32_t MI_U_Raw = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00)) / 0x100;
 
 		float scale = 0x7FFFFF*0.89/50;
 
@@ -245,10 +261,7 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 
 		RD_U = (RD_U + 1)/2;
 
-
-		uint32_t CAPTURE_COMP_U = RD_U * 500*SYSCLK/PWMCLK;
-
-		TIM1->CCR1 = CAPTURE_COMP_U;
+		CAPTURE_COMP_U = RD_U * 500*SYSCLK/PWMCLK;
     }
 }
 
