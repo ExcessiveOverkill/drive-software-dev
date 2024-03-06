@@ -117,8 +117,8 @@ void TIM1_init(){
 	TIM1->DIER |= TIM_DIER_UIE; // Enable Update Interrupt
 	
 	NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
-	NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 1); // Set priority as needed
-	__enable_irq();
+	// NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 1); // Set priority as needed
+	// __enable_irq();
 }
 
 void TIM2_init(){
