@@ -1,4 +1,5 @@
 #include "main.h"
+#include <math.h>
 #include "stm32f413xx.h"
 
 #define SYSCLK		100		// (MHz) System Clock in MHz
@@ -8,24 +9,28 @@
 
 #define PWM_ticks 1000*SYSCLK/PWMCLK/2
 
-#define ADC_VOLTAGE 0.25
+#define ADC_VOLTAGE 0.250			// (V) ADC optimal shunt input voltage
 #define ADC_MIN_VALUE_PERC 0.1094
 #define DFSDM_DIVISIONS 8388608
+#define DFSDM_FOSR (1000*ADCCLK/PWMCLK/2 - 2)
 
 #define VBUS 5
-#define SHUNT_RESISTANCE 0.005
+#define SHUNT_RESISTANCE 0.005	// (Ohms) Current shunt resistance
 
 
 float Kp = 2;		// Proportional gain for current controller (V/A)
-float Ki = 0;		// Integral gain for current controller (V/A/s)
-float I_Term = 0;					// Integral term for current controller (V)
+float Ki = 1;		// Integral gain for current controller (V/A/s)
+float I_term_limit = 3;
 
-float RI_U = 1;
+
+float requested_current_U = 0.0;
 
 // DO NOT MODIFY THESE OUTSIDE OF ISR FUNCTION
 uint32_t CAPTURE_COMP_U = PWM_ticks * 0.5;
 uint32_t CAPTURE_COMP_V = PWM_ticks * 0.5;
 uint32_t CAPTURE_COMP_W = PWM_ticks * 0.5;
+float I_Term = 0;	// Integral term for current controller (V)
+
 
 
 void delay_us(uint32_t time_us) {
@@ -171,9 +176,14 @@ void DFSDM2_init(){
 	DFSDM2_Filter2->FLTFCR |= (3 << DFSDM_FLTFCR_FORD_Pos);	// Set Filter 2 to Sinc^3
 	DFSDM2_Filter3->FLTFCR |= (3 << DFSDM_FLTFCR_FORD_Pos);	// Set Filter 3 to Sinc^3
 
-	DFSDM2_Filter1->FLTFCR |= ((1000*ADCCLK/PWMCLK/2 - 1) << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 1 oversample
-	DFSDM2_Filter2->FLTFCR |= ((1000*ADCCLK/PWMCLK/2 - 1) << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 2 oversample
-	DFSDM2_Filter3->FLTFCR |= ((1000*ADCCLK/PWMCLK/2 - 1) << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 3 oversample
+	DFSDM2_Filter1->FLTFCR |= (DFSDM_FOSR << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 1 oversample
+	DFSDM2_Filter2->FLTFCR |= (DFSDM_FOSR << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 2 oversample
+	DFSDM2_Filter3->FLTFCR |= (DFSDM_FOSR << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 3 oversample
+
+	DFSDM2_Channel1->CHCFGR2 |= 8 << DFSDM_CHCFGR2_DTRBS_Pos; 	// Right-shift data by 8 to fit 32bit into 24bit
+	DFSDM2_Channel2->CHCFGR2 |= 8 << DFSDM_CHCFGR2_DTRBS_Pos; 	// Right-shift data by 8 to fit 32bit into 24bit
+	DFSDM2_Channel3->CHCFGR2 |= 8 << DFSDM_CHCFGR2_DTRBS_Pos; 	// Right-shift data by 8 to fit 32bit into 24bit
+
 
 	//TODO: Initialize short circuit detector
 	//TODO: Initialize Analog Watchdog
@@ -215,6 +225,13 @@ float Current_Controller(float EI){
 	float P_Term = Kp * EI;
 	I_Term += Ki *EI;
 
+	if (I_Term > I_term_limit){
+		I_Term = I_term_limit;
+	}
+	else if (I_Term < -I_term_limit){
+		I_Term = -I_term_limit;
+	}
+
 	float RV = P_Term + I_Term;
 
 	return RV;
@@ -236,7 +253,7 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 
 
 		// get conversion data from DFSDM
-		int32_t MI_U_Raw = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00)) / 0x100;
+		int32_t MI_U_Raw = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00));		// TODO: consider shifting a more optimal number of bit to get higher resolution
 		// other channels...
 
 		// start all conversions for next cycle
@@ -245,23 +262,26 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 //		DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 2 Conversion
 //		DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 3 Conversion
 
+		float measured_current_U = -MI_U_Raw;
+		measured_current_U *= ADC_VOLTAGE;
+		measured_current_U /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
 
-		float scale = 0x7FFFFF*0.89/50;
+		float error_current_U = requested_current_U - measured_current_U;
 
-		float MI_U = -1 * MI_U_Raw / scale;
+		float requested_voltage_U = Current_Controller(error_current_U);
 
-		float EI_U = RI_U - MI_U;
+		float requested_duty_cycle_U = requested_voltage_U / (0.5*VBUS);
 
-		float RV_U = Current_Controller(EI_U);
+		if (requested_duty_cycle_U > (float)0.95){
+			requested_duty_cycle_U = 0.95;
+		}
+		if (requested_duty_cycle_U < (float)-0.95){
+			requested_duty_cycle_U = -0.95;
+		}
 
-		float RD_U = RV_U / (0.5*VBUS);
+		requested_duty_cycle_U = (requested_duty_cycle_U + 1)/2;
 
-		if (RD_U > 0.95) RD_U = 0.95;
-		else if (RD_U < -0.95) RD_U = -0.95;
-
-		RD_U = (RD_U + 1)/2;
-
-		CAPTURE_COMP_U = RD_U * 500*SYSCLK/PWMCLK;
+		CAPTURE_COMP_U = requested_duty_cycle_U * 500*SYSCLK/PWMCLK;
     }
 }
 
