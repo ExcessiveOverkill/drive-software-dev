@@ -14,16 +14,22 @@
 #define DFSDM_DIVISIONS 8388608
 #define DFSDM_FOSR (1000*ADCCLK/PWMCLK/2 - 2)
 
-#define VBUS 5
+#define VBUS 12
 #define SHUNT_RESISTANCE 0.005	// (Ohms) Current shunt resistance
 
+#define pi 3.141592653589793
 
-float Kp = 2;		// Proportional gain for current controller (V/A)
-float Ki = 1;		// Integral gain for current controller (V/A/s)
+
+float Kp = .1;		// Proportional gain for current controller (V/A)
+float Ki = .1;		// Integral gain for current controller (V/A/s)
 float I_term_limit = 3;
 
 
-float requested_current_U = 0.0;
+float requested_Iq = 3.0;
+float requested_Id = 0.0;
+float electrical_rads_per_second = 20.0;
+
+float theta = 0.0;
 
 // DO NOT MODIFY THESE OUTSIDE OF ISR FUNCTION
 uint32_t CAPTURE_COMP_U = PWM_ticks * 0.5;
@@ -39,6 +45,7 @@ void delay_us(uint32_t time_us) {
 }
 
 void RCC_init(){
+
 
 	FLASH->ACR |= FLASH_ACR_ICEN			// Enable intruction cache
 			    | FLASH_ACR_DCEN 			// Enable Date Cache
@@ -61,6 +68,8 @@ void RCC_init(){
 
 	// Update the SystemCoreClock variable to the new clock speed
 	SystemCoreClockUpdate(); // Update the SystemCoreClock global variable with the new clock frequency
+	
+	SystemInit();	// Enable FPU
 
 	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;	// Enable GPIOA  Clock
 	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;    // Enable GPIOB  Clock
@@ -152,7 +161,8 @@ void PWM_enable(){
 
 	// Start DFSDM ADC conversions
 	DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 1 Conversion
-	// others go here...
+	DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 2 Conversion
+	DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 3 Conversion
 }
 
 
@@ -196,6 +206,52 @@ void DFSDM2_init(){
 	DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_DFEN;	// Enable Filter 1
 	DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_DFEN;	// Enable Filter 2
 	DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_DFEN;	// Enable Filter 3
+}
+
+int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q){
+    
+    // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
+    // assert(fabs(A + B + C) < 0.1);    // Assert ABC currents agree
+    
+    float X = (2 * A - B - C) * (1 / sqrt(6));
+    float Y = (B - C) * (1 / sqrt(2));
+    
+    float co = cos(theta);
+    float si = sin(theta);
+    
+    *D = co*X + si*Y;
+    *Q = co*Y - si*X;
+    
+    return 0;
+}
+
+
+int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C){
+    
+    // Inputs
+    // theta = electrical angle [0, 2*pi] radians
+    // D     = direct current [] amps
+    // Q     = quadrature current [] amps
+    
+    // Outputs
+    // A, B, C
+    
+    // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
+    
+    float co = cos(theta);
+    float si = sin(theta);
+    
+    float X = co*D - si*Q;
+    float Y = si*D + co*Q;
+    
+    *A = (sqrt(2.0 / 3.0)) * X;
+    *B = -(1 / sqrt(6.0)) * X;
+    *C = *B - (1.0 / sqrt(2.0)) * Y;
+    *B += (1.0 / sqrt(2.0)) * Y;
+    
+    // assert(fabs(*A + *B + *C) < 0.001);    // Assert ABC currents agree
+    
+    return 0;
 }
 
 
@@ -247,30 +303,70 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
 			return;
 		}
+		if(!(DFSDM2_Filter2->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
+			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
+			return;
+		}
+		if(!(DFSDM2_Filter3->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
+			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
+			return;
+		}
 
 		// set pwm exactly on edge based on data from last cycle
 		TIM1->CCR1 = CAPTURE_COMP_U;
+		TIM1->CCR2 = CAPTURE_COMP_V;
+		TIM1->CCR3 = CAPTURE_COMP_W;
+
+		theta += electrical_rads_per_second * (2*pi) * (.5/(PWMCLK*1000));
+
+		if (theta >= (2*pi)){
+			theta = 0.0;
+		}
 
 
 		// get conversion data from DFSDM
-		int32_t MI_U_Raw = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00));		// TODO: consider shifting a more optimal number of bit to get higher resolution
-		// other channels...
+		// TODO: consider shifting a more optimal number of bit to get higher resolution
+		int32_t MI_U_Raw = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00));
+		int32_t MI_V_Raw = ((int32_t)(DFSDM2_Filter2->FLTRDATAR & 0xFFFFFF00));
+		int32_t MI_W_Raw = ((int32_t)(DFSDM2_Filter3->FLTRDATAR & 0xFFFFFF00));
 
 		// start all conversions for next cycle
         // TODO: Ensure DFSDM conversions occur on PWM timer direction flips
 		DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 1 Conversion
-//		DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 2 Conversion
-//		DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 3 Conversion
+		DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 2 Conversion
+		DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 3 Conversion
 
 		float measured_current_U = -MI_U_Raw;
 		measured_current_U *= ADC_VOLTAGE;
 		measured_current_U /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
 
-		float error_current_U = requested_current_U - measured_current_U;
+		float measured_current_V = -MI_V_Raw;
+		measured_current_V *= ADC_VOLTAGE;
+		measured_current_V /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
 
-		float requested_voltage_U = Current_Controller(error_current_U);
+		float measured_current_W = -MI_W_Raw;
+		measured_current_W *= ADC_VOLTAGE;
+		measured_current_W /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
 
-		float requested_duty_cycle_U = requested_voltage_U / (0.5*VBUS);
+		float measured_Id;
+		float measured_Iq;
+
+		Clarke_and_Park_Transform(theta, measured_current_U, measured_current_V, measured_current_W, &measured_Id, &measured_Iq);
+
+		float error_Iq = requested_Iq - measured_Iq;
+		float error_Id = requested_Id - measured_Id;
+
+		float requested_Vq = Current_Controller(error_Iq);
+		float requested_Vd = Current_Controller(error_Id);
+
+		float requested_duty_cycle_Q = requested_Vq / (0.5*VBUS);
+		float requested_duty_cycle_D = requested_Vd / (0.5*VBUS);
+
+		float requested_duty_cycle_U;
+		float requested_duty_cycle_V;
+		float requested_duty_cycle_W;
+
+		Inverse_Carke_and_Park_Transform(theta, requested_duty_cycle_D, requested_duty_cycle_Q, &requested_duty_cycle_U, &requested_duty_cycle_V, &requested_duty_cycle_W);
 
 		if (requested_duty_cycle_U > (float)0.95){
 			requested_duty_cycle_U = 0.95;
@@ -279,11 +375,47 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 			requested_duty_cycle_U = -0.95;
 		}
 
+		if (requested_duty_cycle_V > (float)0.95){
+			requested_duty_cycle_V = 0.95;
+		}
+		if (requested_duty_cycle_V < (float)-0.95){
+			requested_duty_cycle_V = -0.95;
+		}
+
+		if (requested_duty_cycle_W > (float)0.95){
+			requested_duty_cycle_W = 0.95;
+		}
+		if (requested_duty_cycle_W < (float)-0.95){
+			requested_duty_cycle_W = -0.95;
+		}
+
 		requested_duty_cycle_U = (requested_duty_cycle_U + 1)/2;
+		requested_duty_cycle_V = (requested_duty_cycle_V + 1)/2;
+		requested_duty_cycle_W = (requested_duty_cycle_W + 1)/2;
 
 		CAPTURE_COMP_U = requested_duty_cycle_U * 500*SYSCLK/PWMCLK;
+		CAPTURE_COMP_V = requested_duty_cycle_V * 500*SYSCLK/PWMCLK;
+		CAPTURE_COMP_W = requested_duty_cycle_W * 500*SYSCLK/PWMCLK;
     }
 }
 
 
+void FPU_IRQHandler(void){
+	while(1);
+}
 
+void HardFault_Handler(void){
+	while(1);
+}
+
+void MemManage_Handler(void){
+	while(1);
+}
+
+void BusFault_Handler(void){
+	while(1);
+}
+
+void UsageFault_Handler(void){
+	while(1);
+}

@@ -28,7 +28,7 @@ set(CPU_PARAMETERS
 
     # This needs attention to properly set for used MCU
     -mcpu=cortex-m4
-    -mfpu=fpv5-d16
+    -mfpu=fpv4-sp-d16
     -mfloat-abi=hard
 )
 
