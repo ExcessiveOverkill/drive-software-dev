@@ -1,0 +1,3 @@
+C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug/CMakeFiles/STM32F413RG_Blinky.dir
+C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug/CMakeFiles/edit_cache.dir
+C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug/CMakeFiles/rebuild_cache.dir
