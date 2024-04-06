@@ -211,7 +211,7 @@ if __name__ == "__main__":
     updateFrequency = 10    # Hz, rate at which to send new serial data
 
     try:
-        nucleo = serial.Serial("COM1", 115200, timeout=.1)
+        nucleo = serial.Serial("COM4", 115200, timeout=.1)
     except Exception as e:
         print("cound not connect to serial port", e)
         nucleo = None
@@ -258,7 +258,7 @@ if __name__ == "__main__":
 
             packetLength = len(sendPacket)
 
-            print(f"send data is: {sendPacket} {convertedSendPacket.hex(':')} ({len(sendPacket)//8} bytes)")
+            # print(f"send data is: {sendPacket} {convertedSendPacket.hex(':')} ({len(sendPacket)//8} bytes)")
 
             if nucleo is not None:
                 nucleo.write(convertedSendPacket)
