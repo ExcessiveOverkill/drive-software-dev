@@ -179,7 +179,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "c:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug"
+			"value" : "c:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/build/Debug"
 		},
 		{
 			"name" : "CMAKE_CACHE_MAJOR_VERSION",
@@ -631,7 +631,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug/CMakeFiles/pkgRedirects"
+			"value" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/build/Debug/CMakeFiles/pkgRedirects"
 		},
 		{
 			"name" : "CMAKE_GENERATOR",
@@ -691,7 +691,7 @@
 				}
 			],
 			"type" : "INTERNAL",
-			"value" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG"
+			"value" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG"
 		},
 		{
 			"name" : "CMAKE_INSTALL_PREFIX",
@@ -1187,7 +1187,7 @@
 				}
 			],
 			"type" : "UNINITIALIZED",
-			"value" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/cmake/gcc-arm-none-eabi.cmake"
+			"value" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/cmake/gcc-arm-none-eabi.cmake"
 		},
 		{
 			"name" : "CMAKE_VERBOSE_MAKEFILE",
@@ -1215,7 +1215,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug"
+			"value" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/build/Debug"
 		},
 		{
 			"name" : "STM32F413RG_Blinky_IS_TOP_LEVEL",
@@ -1239,7 +1239,7 @@
 				}
 			],
 			"type" : "STATIC",
-			"value" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG"
+			"value" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG"
 		}
 	],
 	"kind" : "cache",

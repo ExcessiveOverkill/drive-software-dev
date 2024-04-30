@@ -132,8 +132,8 @@
 	"kind" : "cmakeFiles",
 	"paths" : 
 	{
-		"build" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug",
-		"source" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG"
+		"build" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/build/Debug",
+		"source" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG"
 	},
 	"version" : 
 	{

@@ -52,7 +52,7 @@ rule CUSTOM_COMMAND
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
-  command = "C:\Program Files\CMake\bin\cmake.exe" --regenerate-during-build -S"C:\Users\jarre\OneDrive\Desktop\Behrend\FOC\Field-Oriented Control\STM32F413RG" -B"C:\Users\jarre\OneDrive\Desktop\Behrend\FOC\Field-Oriented Control\STM32F413RG\build\Debug"
+  command = "C:\Program Files\CMake\bin\cmake.exe" --regenerate-during-build -SC:\Users\jarre\OneDrive\Desktop\Projects\drive-software-dev\STM32F413RG -BC:\Users\jarre\OneDrive\Desktop\Projects\drive-software-dev\STM32F413RG\build\Debug
   description = Re-running CMake...
   generator = 1
 

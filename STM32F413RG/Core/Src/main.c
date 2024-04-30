@@ -27,7 +27,7 @@ float I_term_limit = 3;
 
 float requested_Iq = 3.0;
 float requested_Id = 0.0;
-float electrical_rads_per_second = 20.0;
+float electrical_rads_per_second = 10.0;
 
 float theta = 0.0;
 
@@ -108,6 +108,10 @@ void GPIO_init(){
 	GPIOB->AFR[1] |= 1 << (4 * (14 - 8));	// Set VL  (PB14) AF to TIM1_CH2N
 	GPIOB->AFR[1] |= 1 << (4 * (15 - 8));	// Set WL  (PB15) AF to TIM1_CH3N
 	GPIOB->AFR[1] |= 1 << (4 * (12 - 8));	// Set STO (PB12) AF to TIM1_BKIN
+
+	// GPIOC->MODER |= (1 << (2 * 10));	// Set STO_EN (PC10) to Output Mode 
+	// GPIOC->MODER |= (0 << (2 * 11));	// Set STO_CH1_MCU_FBK (PC11) to Input Mode 
+	// GPIOC->MODER |= (0 << (2 * 12));	// Set STO_CH2_MCU_FBK (PC12) to Input Mode 
 
 	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED10_1;
 
@@ -208,6 +212,53 @@ void DFSDM2_init(){
 	DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_DFEN;	// Enable Filter 3
 }
 
+int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q){
+    
+    // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
+    // assert(fabs(A + B + C) < 0.1);    // Assert ABC currents agree
+    
+    float X = (2 * A - B - C) * (1 / sqrt(6));
+    float Y = (B - C) * (1 / sqrt(2));
+    
+    float co = cos(theta);
+    float si = sin(theta);
+    
+    *D = co*X + si*Y;
+    *Q = co*Y - si*X;
+    
+    return 0;
+}
+
+
+int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C){
+    
+    // Inputs
+    // theta = electrical angle [0, 2*pi] radians
+    // D     = direct current [] amps
+    // Q     = quadrature current [] amps
+    
+    // Outputs
+    // A, B, C
+    
+    // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
+    
+    float co = cos(theta);
+    float si = sin(theta);
+    
+    float X = co*D - si*Q;
+    float Y = si*D + co*Q;
+    
+    *A = (sqrt(2.0 / 3.0)) * X;
+    *B = -(1 / sqrt(6.0)) * X;
+    *C = *B - (1.0 / sqrt(2.0)) * Y;
+    *B += (1.0 / sqrt(2.0)) * Y;
+    
+    // assert(fabs(*A + *B + *C) < 0.001);    // Assert ABC currents agree
+    
+    return 0;
+}
+
+
 int main(void){
 
 	RCC_init();
@@ -301,7 +352,54 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 		measured_current_W *= ADC_VOLTAGE;
 		measured_current_W /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
 
-		// float requested_V = Current_Controller(error_I);
+		float measured_Id;
+		float measured_Iq;
+
+		Clarke_and_Park_Transform(theta, measured_current_U, measured_current_V, measured_current_W, &measured_Id, &measured_Iq);
+
+		float error_Iq = requested_Iq - measured_Iq;
+		float error_Id = requested_Id - measured_Id;
+
+		float requested_Vq = Current_Controller(error_Iq);
+		float requested_Vd = Current_Controller(error_Id);
+
+		float requested_duty_cycle_Q = requested_Vq / (0.5*VBUS);
+		float requested_duty_cycle_D = requested_Vd / (0.5*VBUS);
+
+		float requested_duty_cycle_U;
+		float requested_duty_cycle_V;
+		float requested_duty_cycle_W;
+
+		Inverse_Carke_and_Park_Transform(theta, requested_duty_cycle_D, requested_duty_cycle_Q, &requested_duty_cycle_U, &requested_duty_cycle_V, &requested_duty_cycle_W);
+
+		if (requested_duty_cycle_U > (float)0.95){
+			requested_duty_cycle_U = 0.95;
+		}
+		if (requested_duty_cycle_U < (float)-0.95){
+			requested_duty_cycle_U = -0.95;
+		}
+
+		if (requested_duty_cycle_V > (float)0.95){
+			requested_duty_cycle_V = 0.95;
+		}
+		if (requested_duty_cycle_V < (float)-0.95){
+			requested_duty_cycle_V = -0.95;
+		}
+
+		if (requested_duty_cycle_W > (float)0.95){
+			requested_duty_cycle_W = 0.95;
+		}
+		if (requested_duty_cycle_W < (float)-0.95){
+			requested_duty_cycle_W = -0.95;
+		}
+
+		requested_duty_cycle_U = (requested_duty_cycle_U + 1)/2;
+		requested_duty_cycle_V = (requested_duty_cycle_V + 1)/2;
+		requested_duty_cycle_W = (requested_duty_cycle_W + 1)/2;
+
+		CAPTURE_COMP_U = requested_duty_cycle_U * 500*SYSCLK/PWMCLK;
+		CAPTURE_COMP_V = requested_duty_cycle_V * 500*SYSCLK/PWMCLK;
+		CAPTURE_COMP_W = requested_duty_cycle_W * 500*SYSCLK/PWMCLK;
     }
 }
 

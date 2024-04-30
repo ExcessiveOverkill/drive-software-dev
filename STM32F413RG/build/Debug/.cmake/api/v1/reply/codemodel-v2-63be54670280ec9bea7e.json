@@ -39,7 +39,7 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "STM32F413RG_Blinky::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-STM32F413RG_Blinky-Debug-01b566b9ce8875dbba34.json",
+					"jsonFile" : "target-STM32F413RG_Blinky-Debug-710e9c822b4b246f9964.json",
 					"name" : "STM32F413RG_Blinky",
 					"projectIndex" : 0
 				}
@@ -49,8 +49,8 @@
 	"kind" : "codemodel",
 	"paths" : 
 	{
-		"build" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug",
-		"source" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG"
+		"build" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/build/Debug",
+		"source" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG"
 	},
 	"version" : 
 	{

@@ -129,15 +129,15 @@
 			[
 				{
 					"backtrace" : 5,
-					"path" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/Core/Inc"
+					"path" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/Core/Inc"
 				},
 				{
 					"backtrace" : 5,
-					"path" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/Drivers/CMSIS/Device/ST/STM32F4xx/Include"
+					"path" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/Drivers/CMSIS/Device/ST/STM32F4xx/Include"
 				},
 				{
 					"backtrace" : 5,
-					"path" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/Drivers/CMSIS/Include"
+					"path" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/Drivers/CMSIS/Include"
 				}
 			],
 			"language" : "C",
@@ -227,15 +227,15 @@
 			[
 				{
 					"backtrace" : 5,
-					"path" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/Core/Inc"
+					"path" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/Core/Inc"
 				},
 				{
 					"backtrace" : 5,
-					"path" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/Drivers/CMSIS/Device/ST/STM32F4xx/Include"
+					"path" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/Drivers/CMSIS/Device/ST/STM32F4xx/Include"
 				},
 				{
 					"backtrace" : 5,
-					"path" : "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/Drivers/CMSIS/Include"
+					"path" : "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/Drivers/CMSIS/Include"
 				}
 			],
 			"language" : "ASM",
@@ -260,7 +260,7 @@
 			},
 			{
 				"backtrace" : 2,
-				"fragment" : "\"-TC:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/STM32F413RGTX_FLASH.ld\"",
+				"fragment" : "-TC:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/STM32F413RGTX_FLASH.ld",
 				"role" : "flags"
 			},
 			{

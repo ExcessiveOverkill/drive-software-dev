@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG
+# Install script for directory: C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -45,5 +45,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "C:/Users/jarre/OneDrive/Desktop/Behrend/FOC/Field-Oriented Control/STM32F413RG/build/Debug/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/STM32F413RG/build/Debug/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
