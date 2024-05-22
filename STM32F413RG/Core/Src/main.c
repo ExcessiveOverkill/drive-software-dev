@@ -27,7 +27,7 @@ float I_term_limit = 3;
 
 float requested_Iq = 3.0;
 float requested_Id = 0.0;
-float electrical_rads_per_second = 20.0;
+float electrical_rads_per_second = 10.0;
 
 float theta = 0.0;
 
@@ -37,14 +37,76 @@ uint32_t CAPTURE_COMP_V = PWM_ticks * 0.5;
 uint32_t CAPTURE_COMP_W = PWM_ticks * 0.5;
 float I_Term = 0;	// Integral term for current controller (V)
 
+// TODO: Remove these...
+uint8_t I2C_address = 0b01000001;
+uint8_t I2C_Register_Address = 0b10100000;
+uint8_t* I2C_data = &I2C_Register_Address;
+uint8_t I2C_data_size = 1;
 
+
+void delay_us(uint32_t time_us);
+
+void CPU_init(void);
+
+void I2C1_init(void);
+void I2C1_Start_Transmit(uint8_t address, uint8_t* data, uint8_t size) ;
+
+void I2C1_Event_Interrupt_Handler(void);
+void I2C1_Error_Interrupt_Handler(void);
+void Start_Bit_Sent_Callback(void);
+void Address_Sent_Callback(void);
+void Ten_Bit_Header_Sent_Callback(void);
+void Stop_Received_Callback(void);
+void Data_Byte_Transfer_Finished_Callback(void);
+void Receive_Buffer_Not_Empty_Callback(void);
+void Transmit_Buffer_Empty_Callback(void);
+void Bus_Error_Callback(void);
+void Arbitration_Loss_Callback(void);
+void Acknowledge_Failure_Callback(void);
+void Overrun_Underrun_Callback(void);
+void PEC_Error_Callback(void);
+void Timeout_Tlow_Error_Callback(void);
+void SMBus_Alert_Callback(void);
+
+void TIM1_init(void);
+
+void TIM2_init(void);
+void PWM_enable(void);
+
+void DFSDM2_init(void);
+
+int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q);
+int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C);
+
+void FPU_IRQHandler(void);
+void HardFault_Handler(void);
+void MemManage_Handler(void);
+void BusFault_Handler(void);
+void UsageFault_Handler(void);
+
+int main(void){
+
+	CPU_init();
+	// GPIO_init();
+	// TIM1_init();
+	// TIM2_init();
+	// DFSDM2_init();
+	// PWM_enable();
+	I2C1_init();
+
+	while(1){
+		I2C1_Start_Transmit(I2C_address, I2C_data, I2C_data_size);
+
+		delay_us(1000000);
+	}
+}
 
 void delay_us(uint32_t time_us) {
 	 TIM2->CNT = 0;
 	 while (TIM2->CNT < time_us*SYSCLK);
 }
 
-void RCC_init(){
+void CPU_init(void){
 
 
 	FLASH->ACR |= FLASH_ACR_ICEN			// Enable intruction cache
@@ -70,27 +132,160 @@ void RCC_init(){
 	SystemCoreClockUpdate(); // Update the SystemCoreClock global variable with the new clock frequency
 	
 	SystemInit();	// Enable FPU
+}
 
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;	// Enable GPIOA  Clock
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;    // Enable GPIOB  Clock
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;    // Enable GPIOC  Clock
-	RCC->APB2ENR |= RCC_APB2ENR_DFSDM2EN;   // Enable DFSDM2 Clock
-	RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;		// Enable TIM1   Clock
-	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;		// Enable TIM2   Clock
+void I2C1_init(void){
+
+	// Assert PCLK1 = 50MHz
+
+	//  • Program the peripheral input clock in I2C_CR2 Register in order to generate correct timings
+	// 	• Configure the clock control registers
+	// 	• Configure the rise time register
+	// 	• Program the I2C_CR1 register to enable the peripheral
+	// 	• Set the START bit in the I2C_CR1 register to generate a Start condition
+
+	//PB7 = SDA
+	//PB8 = SCL
+
+	// Ideal Syntax: I2C1->CR2->FREQ = 331007;
+	// The register is isolated and writing to other register bits outside of FREQ is prevented.
+	// invalid inputs give errors/warnings
+
+	RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;		// Enable I2C1 Peripheral Clock
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;	// Enable GPIOB Peripheral Clock
+
+	GPIOB->MODER &= ~(GPIO_MODER_MODER7 | GPIO_MODER_MODER8); 				// Clear mode bits
+    GPIOB->MODER |= (GPIO_MODER_MODER7_1 | GPIO_MODER_MODER8_1); 			// Alternate function mode
+    GPIOB->OTYPER |= (GPIO_OTYPER_OT_7 | GPIO_OTYPER_OT_8); 				// Open-drain
+    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPD7 | GPIO_PUPDR_PUPD8); 				// Clear pull-up/pull-down bits
+    GPIOB->PUPDR |= (GPIO_PUPDR_PUPD7_0 | GPIO_PUPDR_PUPD8_0); 				// Pull-up
+    GPIOB->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR7 | GPIO_OSPEEDER_OSPEEDR8);	// Very high speed
+
+    GPIOB->AFR[0] |= (4 << (7 * 4)); 			// Set AFR bits to AF4 (I2C1) for PB7
+    GPIOB->AFR[1] |= (4 << ((8 - 8) * 4)); 		// Set AFR bits to AF4 (I2C1) for PB8
+
+	RCC->APB1RSTR |= RCC_APB1RSTR_I2C1RST;	// Reset I2C peripheral to clear any settings
+    RCC->APB1RSTR &= ~RCC_APB1RSTR_I2C1RST;
+
+	
+
+	I2C1->CR2 |= (50 << I2C_CR2_FREQ_Pos) & I2C_CR2_FREQ_Msk;	// Set I2C1 Peripheral Clock Frequency to 50MHz
+	
+	// I2C1->CCR = (1 << I2C_CCR_FS_Pos) & I2C_CCR_FS_Msk;	// Set I2C1 Fast/Standard mode to Fast Mode
+	I2C1->CCR |= (250 << I2C_CCR_CCR_Pos) & I2C_CCR_CCR_Msk;	// Set I2C1 Clock control register to 100kHz
+	// CCR = Peripheral_Clock_1 / (3 * SCL_Output_Frequency)
+
+	I2C1->TRISE |= (51 << I2C_TRISE_TRISE_Pos) & I2C_TRISE_TRISE_Msk;	//Set Maximum Rise Time to 1000ns
+	//TRISE = Maximum_Rise_Time / Peripheral_Clock_1_Period + 1
+	// 51   =       1000ns      /            20ns           + 1
+
+	// TODO: Enable inturupts (ITEVFEN and ITBUFEN)
+	I2C1->CR1 |= (1 << I2C_CR1_PE_Pos) & I2C_CR1_PE_Msk;	// Enable I2C1 Peripheral
+
+	// I2C1->CR2 |= I2C_CR2_ITEVTEN | I2C_CR2_ITBUFEN | I2C_CR2_ITERREN;	// Enable I2C1 Interrupts
+
+	// NVIC_EnableIRQ(I2C1_EV_IRQn);	// Configure NVIC for I2C1 Event Inturrpt
+    // NVIC_EnableIRQ(I2C1_ER_IRQn);	// Configure NVIC for I2C1 Error Inturrpt
+}
+
+void I2C1_Start_Transmit(uint8_t address, uint8_t* data, uint8_t size) {
+
+	// Assert no transmission is in progress
+
+	I2C1->CR1 |= (1 << I2C_CR1_ACK_Pos);	// Enable I2C1 Acknowledge
+	I2C1->CR1 |= I2C_CR1_START;	// Send START condition
+	I2C1->DR |= address << 1;	// Set Data Resister to I2C Slave address
+	
+
+	while (!(I2C1->SR1 & I2C_SR1_TXE));
+	I2C1->DR |= 0b01010101;
+	while (!(I2C1->SR1 & I2C_SR1_BTF));
+
+    // TODO: use interrupt to avoid wait
+    // for (uint8_t i = 0; i < size; i++) {
+    //     while (!(I2C1->SR1 & I2C_SR1_TXE)); 	// Wait until the TXIS (transmit interrupt status) flag is set
+
+    //     I2C1->DR |= data[i];	// Send data
+    // }
+
+
+	// I2C1->CR1 |= I2C_CR1_POS;	// Send STOP condition
+
+    // // TODO: use interrupt to avoid wait
+    // while (!(I2C1->SR1 & I2C_SR1_BTF));	// Wait until the BTC (byte transfer complete) flag is set
+}
+
+void I2C1_Event_Interrupt_Handler(void){
+
+	if (I2C1->SR1 & I2C_SR1_SB) {
+        Start_Bit_Sent_Callback();
+        I2C1->SR1 &= ~I2C_SR1_SB; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_ADDR) {
+        Address_Sent_Callback();
+        (void) I2C1->SR2; // Clear the interrupt flag by reading SR2
+    }
+    if (I2C1->SR1 & I2C_SR1_ADD10) {
+        Ten_Bit_Header_Sent_Callback();
+        I2C1->SR1 &= ~I2C_SR1_ADD10; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_STOPF) {
+        Stop_Received_Callback();
+        I2C1->CR1 |= I2C_CR1_PE; // Clear the STOPF flag by writing to CR1
+    }
+    if (I2C1->SR1 & I2C_SR1_BTF) {
+        Data_Byte_Transfer_Finished_Callback();
+        I2C1->SR1 &= ~I2C_SR1_BTF; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_RXNE) {
+        Receive_Buffer_Not_Empty_Callback();
+        I2C1->SR1 &= ~I2C_SR1_RXNE; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_TXE) {
+        Transmit_Buffer_Empty_Callback();
+        I2C1->SR1 &= ~I2C_SR1_TXE; // Clear the interrupt flag
+    }
+}
+
+void I2C1_Error_Interrupt_Handler(void){
+
+	if (I2C1->SR1 & I2C_SR1_BERR) {
+        Bus_Error_Callback();
+        I2C1->SR1 &= ~I2C_SR1_BERR; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_ARLO) {
+        Arbitration_Loss_Callback();
+        I2C1->SR1 &= ~I2C_SR1_ARLO; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_AF) {
+        Acknowledge_Failure_Callback();
+        I2C1->SR1 &= ~I2C_SR1_AF; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_OVR) {
+        Overrun_Underrun_Callback();
+        I2C1->SR1 &= ~I2C_SR1_OVR; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_PECERR) {
+        PEC_Error_Callback();
+        I2C1->SR1 &= ~I2C_SR1_PECERR; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_TIMEOUT) {
+        Timeout_Tlow_Error_Callback();
+        I2C1->SR1 &= ~I2C_SR1_TIMEOUT; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_SMBALERT) {
+        SMBus_Alert_Callback();
+        I2C1->SR1 &= ~I2C_SR1_SMBALERT; // Clear the interrupt flag
+    }
 }
 
 
-void GPIO_init(){
+void TIM1_init(void){
 
-	GPIOB->MODER |= (2 << (2 * 9));				// Set U_Data (PB9) to AF mode
-	GPIOC->MODER |= (2 << (2 * 5));				// Set V_Data (PC5) to AF mode
-	GPIOC->MODER |= (2 << (2 * 9));				// Set W_Data (PC9) to AF mode
-	GPIOB->MODER |= (2 << (2 * 10));			// Set ADC_CLK (PB10) to AF mode
-	GPIOB->AFR[1] |= (6  << (4 * (9  - 8)));	// Set PB9  AF to DFSDM2_ DATIN1
-	GPIOC->AFR[0] |= (3  << (4 * (5  - 0)));	// Set PC5  AF to DFSDM2_ DATIN2
-	GPIOC->AFR[1] |= (7  << (4 * (9  - 8)));	// Set PC9  AF to DFSDM2_ DATIN3
-	GPIOB->AFR[1] |= (10 << (4 * (10 - 8)));	// Set PB10 AF to DFSDM2_CKOUT
+	RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;		// Enable TIM1   Clock
 
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;	// Enable GPIOA  Clock
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;    // Enable GPIOB  Clock
 
 	GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODER8)  | GPIO_MODER_MODER8_1;	// Set UH  (PA8)  to AF mode
 	GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODER9)  | GPIO_MODER_MODER9_1;	// Set VH  (PA9)  to AF mode
@@ -109,11 +304,6 @@ void GPIO_init(){
 	GPIOB->AFR[1] |= 1 << (4 * (15 - 8));	// Set WL  (PB15) AF to TIM1_CH3N
 	GPIOB->AFR[1] |= 1 << (4 * (12 - 8));	// Set STO (PB12) AF to TIM1_BKIN
 
-	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED10_1;
-
-}
-
-void TIM1_init(){
 
 	uint32_t deadtime_ticks = (DEADTIME * SYSCLK) / 1000;
 	TIM1->BDTR |= deadtime_ticks & TIM_BDTR_DTG;
@@ -143,6 +333,9 @@ void TIM1_init(){
 }
 
 void TIM2_init(){
+
+	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;		// Enable TIM2   Clock
+
 	TIM2->PSC = 0; // Prescaler
 	TIM2->ARR = 0xFFFF;  // Max auto-reload value
 	TIM2->CR1 |= TIM_CR1_CEN; // Enable TIM2
@@ -167,6 +360,25 @@ void PWM_enable(){
 
 
 void DFSDM2_init(){
+
+	RCC->APB2ENR |= RCC_APB2ENR_DFSDM2EN;   // Enable DFSDM2 Clock
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;    // Enable GPIOB  Clock
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;    // Enable GPIOC  Clock
+
+	// GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED10_1;
+
+	GPIOB->MODER |= (2 << (2 * 9));				// Set U_Data (PB9) to AF mode
+	GPIOC->MODER |= (2 << (2 * 5));				// Set V_Data (PC5) to AF mode
+	GPIOC->MODER |= (2 << (2 * 9));				// Set W_Data (PC9) to AF mode
+	GPIOB->MODER |= (2 << (2 * 10));			// Set ADC_CLK (PB10) to AF mode
+	GPIOB->AFR[1] |= (6  << (4 * (9  - 8)));	// Set PB9  AF to DFSDM2_ DATIN1
+	GPIOC->AFR[0] |= (3  << (4 * (5  - 0)));	// Set PC5  AF to DFSDM2_ DATIN2
+	GPIOC->AFR[1] |= (7  << (4 * (9  - 8)));	// Set PC9  AF to DFSDM2_ DATIN3
+	GPIOB->AFR[1] |= (10 << (4 * (10 - 8)));	// Set PB10 AF to DFSDM2_CKOUT
+
+	// GPIOC->MODER |= (1 << (2 * 10));	// Set STO_EN (PC10) to Output Mode 
+	// GPIOC->MODER |= (0 << (2 * 11));	// Set STO_CH1_MCU_FBK (PC11) to Input Mode 
+	// GPIOC->MODER |= (0 << (2 * 12));	// Set STO_CH2_MCU_FBK (PC12) to Input Mode 
 
 	DFSDM2_Channel0->CHCFGR1 |= ((SYSCLK/ADCCLK - 1) << DFSDM_CHCFGR1_CKOUTDIV_Pos);
 
@@ -253,25 +465,6 @@ int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, fl
     
     return 0;
 }
-
-
-int main(void){
-
-	RCC_init();
-	GPIO_init();
-	TIM1_init();
-	TIM2_init();
-	DFSDM2_init();
-	PWM_enable();
-
-	while(1){
-
-		//TODO: RS422 input Requested current
-
-		delay_us(100);
-	}
-}
-
 
 
 float Current_Controller(float EI){
@@ -417,5 +610,70 @@ void BusFault_Handler(void){
 }
 
 void UsageFault_Handler(void){
+	while(1);
+}
+
+
+
+
+void Start_Bit_Sent_Callback(void){
+	while(1);
+}
+
+void Address_Sent_Callback(void){
+	while(1);
+}
+
+void Ten_Bit_Header_Sent_Callback(void){
+	while(1);
+}
+
+void Stop_Received_Callback(void){
+	while(1);
+}
+
+void Data_Byte_Transfer_Finished_Callback(void){
+	while(1);
+}
+
+void Receive_Buffer_Not_Empty_Callback(void){
+	while(1);
+}
+
+void Transmit_Buffer_Empty_Callback(void){
+	
+
+
+
+}
+
+
+
+
+void Bus_Error_Callback(void){
+	while(1);
+}
+
+void Arbitration_Loss_Callback(void){
+	while(1);
+}
+
+void Acknowledge_Failure_Callback(void){
+	while(1);
+}
+
+void Overrun_Underrun_Callback(void){
+	while(1);
+}
+
+void PEC_Error_Callback(void){
+	while(1);
+}
+
+void Timeout_Tlow_Error_Callback(void){
+	while(1);
+}
+
+void SMBus_Alert_Callback(void){
 	while(1);
 }
