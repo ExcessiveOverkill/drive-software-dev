@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "STM32F413RG"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"cmath": "c"
+		}
+	}
+}
