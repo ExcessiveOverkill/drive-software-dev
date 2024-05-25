@@ -68,6 +68,13 @@ void PEC_Error_Callback(void);
 void Timeout_Tlow_Error_Callback(void);
 void SMBus_Alert_Callback(void);
 
+void USART6_init(void);
+void USART6_Error_Interrupt_Handler(void);
+void Parity_Error_Callback(void);
+void Framing_Error_Callback(void);
+void Noise_Detected_Error_Callback(void);
+void Overrun_Error_Callback(void);
+
 void TIM1_init(void);
 
 void TIM2_init(void);
@@ -276,6 +283,35 @@ void I2C1_Error_Interrupt_Handler(void){
     if (I2C1->SR1 & I2C_SR1_SMBALERT) {
         SMBus_Alert_Callback();
         I2C1->SR1 &= ~I2C_SR1_SMBALERT; // Clear the interrupt flag
+    }
+}
+
+void USART6_init(void){
+	USART6->CR1 |= USART_CR1_UE;	// Enable USART1
+	USART6->CR3 |= USART_CR3_DMAR;	// Enable DMA
+	USART6->BRR |= USART_BRR_DIV_Mantissa;	// Program Baud rate Mantissa
+	USART6->BRR |= USART_BRR_DIV_Fraction;	// Program Baud rate fraction
+	USART6->CR1 |= USART_CR1_RE;	// Enable Receiver
+
+}
+
+void USART6_Error_Interrupt_Handler(void){
+
+	if (USART6->SR & USART_SR_PE) {
+        Parity_Error_Callback();
+		// Cleared by read or write to USART_DR_DR
+    }
+	if (USART6->SR & USART_SR_FE) {
+        Framing_Error_Callback();
+		// Cleared by reading USART_DR_DR 
+    }
+	if (USART6->SR & USART_SR_NE) {
+        Noise_Detected_Error_Callback();
+		// Cleared by reading USART_DR_DR 
+    }
+	if (USART6->SR & USART_SR_ORE) {
+        Overrun_Error_Callback();
+		// Cleared by reading USART_DR_DR 
     }
 }
 
@@ -675,5 +711,24 @@ void Timeout_Tlow_Error_Callback(void){
 }
 
 void SMBus_Alert_Callback(void){
+	while(1);
+}
+
+
+
+
+void Parity_Error_Callback(void){
+	while(1);
+}
+
+void Framing_Error_Callback(void){
+	while(1);
+}
+
+void Noise_Detected_Error_Callback(void){
+	while(1);
+}
+
+void Overrun_Error_Callback(void){
 	while(1);
 }
