@@ -3,6 +3,7 @@
 {
     "version": "0.2.0",
     "configurations": [
+        
         {
             "name": "Debug Microcontroller - STLink-V3",
             "cwd": "${workspaceFolder}",        //Path from where commands are executed

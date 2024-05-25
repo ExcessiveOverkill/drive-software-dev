@@ -2,7 +2,7 @@
 /**
   ******************************************************************************
   * @file           : main.h
-  * @brief          : Header for main.c file.
+  * @brief          : Header for main.cpp file.
   *                   This file contains the common defines of the application.
   ******************************************************************************
   * @attention
@@ -31,7 +31,9 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <math.h>
+#include "stm32f413xx.h"
+#include "user_io.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -50,7 +52,7 @@ extern "C" {
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
-void Error_Handler(void);
+//void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
@@ -59,6 +61,10 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 
 /* USER CODE BEGIN Private defines */
+
+#define pi 3.141592653589793
+#define SYSCLK		100		// (MHz) System Clock in MHz
+#define SYSTICK_FREQUENCY 100    // (Hz)  do not set above 1khz
 
 /* USER CODE END Private defines */
 

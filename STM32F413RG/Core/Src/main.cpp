@@ -1,8 +1,5 @@
 #include "main.h"
-#include <math.h>
-#include "stm32f413xx.h"
 
-#define SYSCLK		100		// (MHz) System Clock in MHz
 #define ADCCLK		20		// (MHz) ADC output clock
 #define DEADTIME	100		// (ns)  PWM Deadtime (ns)
 #define PWMCLK		25		// (KHz) PWM Output Frequency
@@ -16,8 +13,6 @@
 
 #define VBUS 12
 #define SHUNT_RESISTANCE 0.005	// (Ohms) Current shunt resistance
-
-#define pi 3.141592653589793
 
 
 float Kp = .1;		// Proportional gain for current controller (V/A)
@@ -38,35 +33,433 @@ uint32_t CAPTURE_COMP_W = PWM_ticks * 0.5;
 float I_Term = 0;	// Integral term for current controller (V)
 
 // TODO: Remove these...
-uint8_t I2C_address = 0b01000001;
+uint8_t I2C_address = 0x20;
 uint8_t I2C_Register_Address = 0b10100000;
 uint8_t* I2C_data = &I2C_Register_Address;
 uint8_t I2C_data_size = 1;
 
+extern "C" {
+
+void NMI_Handler(void){
+	while(1);
+}   
+
+void HardFault_Handler(void){
+	while(1);
+}   
+
+void MemManage_Handler(void){
+	while(1);
+}   
+
+void BusFault_Handler(void){
+	while(1);
+}   
+
+void UsageFault_Handler(void){
+	while(1);
+}   
+
+void SVC_Handler(void){
+	while(1);
+}   
+
+void DebugMon_Handler(void){
+	while(1);
+}   
+
+void PendSV_Handler(void){
+	while(1);
+}   
+
+// void SysTick_Handler(void){
+// 	while(1);
+// }   
+
+void WWDG_IRQHandler(void){
+	while(1);
+}   
+
+void PVD_IRQHandler(void){
+	while(1);
+}   
+
+void TAMP_STAMP_IRQHandler(void){
+	while(1);
+}   
+
+void RTC_WKUP_IRQHandler(void){
+	while(1);
+}   
+
+void FLASH_IRQHandler(void){
+	while(1);
+}   
+
+void RCC_IRQHandler(void){
+	while(1);
+}   
+
+void EXTI0_IRQHandler(void){
+	while(1);
+}   
+
+void EXTI1_IRQHandler(void){
+	while(1);
+}   
+
+void EXTI2_IRQHandler(void){
+	while(1);
+}   
+
+void EXTI3_IRQHandler(void){
+	while(1);
+}   
+
+void EXTI4_IRQHandler(void){
+	while(1);
+}   
+
+void DMA1_Stream0_IRQHandler(void){
+	while(1);
+}   
+
+void DMA1_Stream1_IRQHandler(void){
+	while(1);
+}   
+
+void DMA1_Stream2_IRQHandler(void){
+	while(1);
+}   
+
+void DMA1_Stream3_IRQHandler(void){
+	while(1);
+}   
+
+void DMA1_Stream4_IRQHandler(void){
+	while(1);
+}   
+
+void DMA1_Stream5_IRQHandler(void){
+	while(1);
+}   
+
+void DMA1_Stream6_IRQHandler(void){
+	while(1);
+}   
+
+void ADC_IRQHandler(void){
+	while(1);
+}   
+
+void CAN1_TX_IRQHandler(void){
+	while(1);
+}   
+
+void CAN1_RX0_IRQHandler(void){
+	while(1);
+}   
+
+void CAN1_RX1_IRQHandler(void){
+	while(1);
+}   
+
+void CAN1_SCE_IRQHandler(void){
+	while(1);
+}   
+
+void EXTI9_5_IRQHandler(void){
+	while(1);
+}   
+
+void TIM1_BRK_TIM9_IRQHandler(void){
+	while(1);
+}   
+
+// void TIM1_UP_TIM10_IRQHandler(void){
+// 	while(1);
+// }   
+
+void TIM1_TRG_COM_TIM11_IRQHandler(void){
+	while(1);
+}   
+
+void TIM1_CC_IRQHandler(void){
+	while(1);
+}   
+
+void TIM2_IRQHandler(void){
+	while(1);
+}   
+
+void TIM3_IRQHandler(void){
+	while(1);
+}   
+
+void TIM4_IRQHandler(void){
+	while(1);
+}   
+
+// void I2C1_EV_IRQHandler(void){
+// 	while(1);
+// }   
+
+// void I2C1_ER_IRQHandler(void){
+// 	while(1);
+// }   
+
+void I2C2_EV_IRQHandler(void){
+	while(1);
+}   
+
+void I2C2_ER_IRQHandler(void){
+	while(1);
+}   
+
+void SPI1_IRQHandler(void){
+	while(1);
+}   
+
+void SPI2_IRQHandler(void){
+	while(1);
+}   
+
+void USART1_IRQHandler(void){
+	while(1);
+}   
+
+void USART2_IRQHandler(void){
+	while(1);
+}   
+
+void USART3_IRQHandler(void){
+	while(1);
+}   
+
+void EXTI15_10_IRQHandler(void){
+	while(1);
+}   
+
+void RTC_Alarm_IRQHandler(void){
+	while(1);
+}   
+
+void OTG_FS_WKUP_IRQHandler(void){
+	while(1);
+}   
+
+void TIM8_BRK_TIM12_IRQHandler(void){
+	while(1);
+}   
+
+void TIM8_UP_TIM13_IRQHandler(void){
+	while(1);
+}   
+
+void TIM8_TRG_COM_TIM14_IRQHandler(void){
+	while(1);
+}   
+
+void TIM8_CC_IRQHandler(void){
+	while(1);
+}   
+
+void DMA1_Stream7_IRQHandler(void){
+	while(1);
+}   
+
+void FSMC_IRQHandler(void){
+	while(1);
+}   
+
+void SDIO_IRQHandler(void){
+	while(1);
+}   
+
+void TIM5_IRQHandler(void){
+	while(1);
+}   
+
+void SPI3_IRQHandler(void){
+	while(1);
+}   
+
+void UART4_IRQHandler(void){
+	while(1);
+}   
+
+void UART5_IRQHandler(void){
+	while(1);
+}   
+
+void TIM6_DAC_IRQHandler(void){
+	while(1);
+}   
+
+void TIM7_IRQHandler(void){
+	while(1);
+}   
+
+void DMA2_Stream0_IRQHandler(void){
+	while(1);
+}   
+
+void DMA2_Stream1_IRQHandler(void){
+	while(1);
+}   
+
+void DMA2_Stream2_IRQHandler(void){
+	while(1);
+}   
+
+void DMA2_Stream3_IRQHandler(void){
+	while(1);
+}   
+
+void DMA2_Stream4_IRQHandler(void){
+	while(1);
+}   
+
+void DFSDM1_FLT0_IRQHandler(void){
+	while(1);
+}   
+
+void DFSDM1_FLT1_IRQHandler(void){
+	while(1);
+}   
+
+void CAN2_TX_IRQHandler(void){
+	while(1);
+}   
+
+void CAN2_RX0_IRQHandler(void){
+	while(1);
+}   
+
+void CAN2_RX1_IRQHandler(void){
+	while(1);
+}   
+
+void CAN2_SCE_IRQHandler(void){
+	while(1);
+}   
+
+void OTG_FS_IRQHandler(void){
+	while(1);
+}   
+
+void DMA2_Stream5_IRQHandler(void){
+	while(1);
+}   
+
+void DMA2_Stream6_IRQHandler(void){
+	while(1);
+}   
+
+void DMA2_Stream7_IRQHandler(void){
+	while(1);
+}   
+
+void USART6_IRQHandler(void){
+	while(1);
+}   
+
+void I2C3_EV_IRQHandler(void){
+	while(1);
+}   
+
+void I2C3_ER_IRQHandler(void){
+	while(1);
+}   
+
+void CAN3_TX_IRQHandler(void){
+	while(1);
+}   
+
+void CAN3_RX0_IRQHandler(void){
+	while(1);
+}   
+
+void CAN3_RX1_IRQHandler(void){
+	while(1);
+}   
+
+void CAN3_SCE_IRQHandler(void){
+	while(1);
+}   
+
+void RNG_IRQHandler(void){
+	while(1);
+}   
+
+void FPU_IRQHandler(void){
+	while(1);
+}   
+
+void UART7_IRQHandler(void){
+	while(1);
+}   
+
+void UART8_IRQHandler(void){
+	while(1);
+}   
+
+void SPI4_IRQHandler(void){
+	while(1);
+}   
+
+void SPI5_IRQHandler(void){
+	while(1);
+}   
+
+void SAI1_IRQHandler(void){
+	while(1);
+}   
+
+void UART9_IRQHandler(void){
+	while(1);
+}   
+
+void UART10_IRQHandler(void){
+	while(1);
+}   
+
+void QUADSPI_IRQHandler(void){
+	while(1);
+}   
+
+void FMPI2C1_EV_IRQHandler(void){
+	while(1);
+}   
+
+void FMPI2C1_ER_IRQHandler(void){
+	while(1);
+}   
+
+void LPTIM1_IRQHandler(void){
+	while(1);
+}   
+
+void DFSDM2_FLT0_IRQHandler(void){
+	while(1);
+}   
+
+void DFSDM2_FLT1_IRQHandler(void){
+	while(1);
+}   
+
+void DFSDM2_FLT2_IRQHandler(void){
+	while(1);
+}   
+
+void DFSDM2_FLT3_IRQHandler(void){
+	while(1);
+}   
+}
 
 void delay_us(uint32_t time_us);
 
 void CPU_init(void);
-
-void I2C1_init(void);
-void I2C1_Start_Transmit(uint8_t address, uint8_t* data, uint8_t size) ;
-
-void I2C1_Event_Interrupt_Handler(void);
-void I2C1_Error_Interrupt_Handler(void);
-void Start_Bit_Sent_Callback(void);
-void Address_Sent_Callback(void);
-void Ten_Bit_Header_Sent_Callback(void);
-void Stop_Received_Callback(void);
-void Data_Byte_Transfer_Finished_Callback(void);
-void Receive_Buffer_Not_Empty_Callback(void);
-void Transmit_Buffer_Empty_Callback(void);
-void Bus_Error_Callback(void);
-void Arbitration_Loss_Callback(void);
-void Acknowledge_Failure_Callback(void);
-void Overrun_Underrun_Callback(void);
-void PEC_Error_Callback(void);
-void Timeout_Tlow_Error_Callback(void);
-void SMBus_Alert_Callback(void);
 
 void TIM1_init(void);
 
@@ -78,30 +471,38 @@ void DFSDM2_init(void);
 int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q);
 int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C);
 
-void FPU_IRQHandler(void);
-void HardFault_Handler(void);
-void MemManage_Handler(void);
-void BusFault_Handler(void);
-void UsageFault_Handler(void);
+user_io userIO(1000/SYSTICK_FREQUENCY);
 
 int main(void){
 
 	CPU_init();
 	// GPIO_init();
 	// TIM1_init();
-	// TIM2_init();
+	TIM2_init();
 	// DFSDM2_init();
 	// PWM_enable();
-	I2C1_init();
+	//I2C1_init();
+
+	SysTick->LOAD = (SYSCLK*1000000/8) / SYSTICK_FREQUENCY;
+	
+	NVIC_EnableIRQ(SysTick_IRQn);
+
+	SysTick->CTRL = 0b11;	// enable counter and exception
+
+	delay_us(1000);
+
+	userIO.init();
 
 	while(1){
-		I2C1_Start_Transmit(I2C_address, I2C_data, I2C_data_size);
 
-		delay_us(1000000);
+		userIO.set_led_state(userIO.get_switch_states(), userIO.blink_fast);
+		userIO.set_led_state(~userIO.get_switch_states(), userIO.off);
+
 	}
 }
 
 void delay_us(uint32_t time_us) {
+	// blocking delay up to 42949672 us
 	 TIM2->CNT = 0;
 	 while (TIM2->CNT < time_us*SYSCLK);
 }
@@ -128,156 +529,28 @@ void CPU_init(void){
 	RCC->CFGR |= RCC_CFGR_SW_PLL;  // Set the clock source to PLL
 	while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL); // Wait until PLL is used as the system clock source
 
+	RCC->CFGR |= RCC_CFGR_PPRE1_DIV2;	// divide by 2 to get 50Mhz for APB1 peripherals
+
 	// Update the SystemCoreClock variable to the new clock speed
 	SystemCoreClockUpdate(); // Update the SystemCoreClock global variable with the new clock frequency
 	
 	SystemInit();	// Enable FPU
 }
 
-void I2C1_init(void){
+extern "C" {
+void SysTick_Handler(void){		// called at SYSTICK_FREQUENCY
+	userIO.update();
+}   
 
-	// Assert PCLK1 = 50MHz
-
-	//  • Program the peripheral input clock in I2C_CR2 Register in order to generate correct timings
-	// 	• Configure the clock control registers
-	// 	• Configure the rise time register
-	// 	• Program the I2C_CR1 register to enable the peripheral
-	// 	• Set the START bit in the I2C_CR1 register to generate a Start condition
-
-	//PB7 = SDA
-	//PB8 = SCL
-
-	// Ideal Syntax: I2C1->CR2->FREQ = 331007;
-	// The register is isolated and writing to other register bits outside of FREQ is prevented.
-	// invalid inputs give errors/warnings
-
-	RCC->APB1ENR |= RCC_APB1ENR_I2C1EN;		// Enable I2C1 Peripheral Clock
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;	// Enable GPIOB Peripheral Clock
-
-	GPIOB->MODER &= ~(GPIO_MODER_MODER7 | GPIO_MODER_MODER8); 				// Clear mode bits
-    GPIOB->MODER |= (GPIO_MODER_MODER7_1 | GPIO_MODER_MODER8_1); 			// Alternate function mode
-    GPIOB->OTYPER |= (GPIO_OTYPER_OT_7 | GPIO_OTYPER_OT_8); 				// Open-drain
-    GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPD7 | GPIO_PUPDR_PUPD8); 				// Clear pull-up/pull-down bits
-    GPIOB->PUPDR |= (GPIO_PUPDR_PUPD7_0 | GPIO_PUPDR_PUPD8_0); 				// Pull-up
-    GPIOB->OSPEEDR |= (GPIO_OSPEEDER_OSPEEDR7 | GPIO_OSPEEDER_OSPEEDR8);	// Very high speed
-
-    GPIOB->AFR[0] |= (4 << (7 * 4)); 			// Set AFR bits to AF4 (I2C1) for PB7
-    GPIOB->AFR[1] |= (4 << ((8 - 8) * 4)); 		// Set AFR bits to AF4 (I2C1) for PB8
-
-	RCC->APB1RSTR |= RCC_APB1RSTR_I2C1RST;	// Reset I2C peripheral to clear any settings
-    RCC->APB1RSTR &= ~RCC_APB1RSTR_I2C1RST;
-
-	
-
-	I2C1->CR2 |= (50 << I2C_CR2_FREQ_Pos) & I2C_CR2_FREQ_Msk;	// Set I2C1 Peripheral Clock Frequency to 50MHz
-	
-	// I2C1->CCR = (1 << I2C_CCR_FS_Pos) & I2C_CCR_FS_Msk;	// Set I2C1 Fast/Standard mode to Fast Mode
-	I2C1->CCR |= (250 << I2C_CCR_CCR_Pos) & I2C_CCR_CCR_Msk;	// Set I2C1 Clock control register to 100kHz
-	// CCR = Peripheral_Clock_1 / (3 * SCL_Output_Frequency)
-
-	I2C1->TRISE |= (51 << I2C_TRISE_TRISE_Pos) & I2C_TRISE_TRISE_Msk;	//Set Maximum Rise Time to 1000ns
-	//TRISE = Maximum_Rise_Time / Peripheral_Clock_1_Period + 1
-	// 51   =       1000ns      /            20ns           + 1
-
-	// TODO: Enable inturupts (ITEVFEN and ITBUFEN)
-	I2C1->CR1 |= (1 << I2C_CR1_PE_Pos) & I2C_CR1_PE_Msk;	// Enable I2C1 Peripheral
-
-	// I2C1->CR2 |= I2C_CR2_ITEVTEN | I2C_CR2_ITBUFEN | I2C_CR2_ITERREN;	// Enable I2C1 Interrupts
-
-	// NVIC_EnableIRQ(I2C1_EV_IRQn);	// Configure NVIC for I2C1 Event Inturrpt
-    // NVIC_EnableIRQ(I2C1_ER_IRQn);	// Configure NVIC for I2C1 Error Inturrpt
+void I2C1_EV_IRQHandler(void){
+	userIO.I2C1_Event_Interrupt();
 }
 
-void I2C1_Start_Transmit(uint8_t address, uint8_t* data, uint8_t size) {
-
-	// Assert no transmission is in progress
-
-	I2C1->CR1 |= (1 << I2C_CR1_ACK_Pos);	// Enable I2C1 Acknowledge
-	I2C1->CR1 |= I2C_CR1_START;	// Send START condition
-	I2C1->DR |= address << 1;	// Set Data Resister to I2C Slave address
-	
-
-	while (!(I2C1->SR1 & I2C_SR1_TXE));
-	I2C1->DR |= 0b01010101;
-	while (!(I2C1->SR1 & I2C_SR1_BTF));
-
-    // TODO: use interrupt to avoid wait
-    // for (uint8_t i = 0; i < size; i++) {
-    //     while (!(I2C1->SR1 & I2C_SR1_TXE)); 	// Wait until the TXIS (transmit interrupt status) flag is set
-
-    //     I2C1->DR |= data[i];	// Send data
-    // }
-
-
-	// I2C1->CR1 |= I2C_CR1_POS;	// Send STOP condition
-
-    // // TODO: use interrupt to avoid wait
-    // while (!(I2C1->SR1 & I2C_SR1_BTF));	// Wait until the BTC (byte transfer complete) flag is set
+void I2C1_ER_IRQHandler(void){
+	userIO.I2C1_Error_Interrupt();
+}
 }
 
-void I2C1_Event_Interrupt_Handler(void){
-
-	if (I2C1->SR1 & I2C_SR1_SB) {
-        Start_Bit_Sent_Callback();
-        I2C1->SR1 &= ~I2C_SR1_SB; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_ADDR) {
-        Address_Sent_Callback();
-        (void) I2C1->SR2; // Clear the interrupt flag by reading SR2
-    }
-    if (I2C1->SR1 & I2C_SR1_ADD10) {
-        Ten_Bit_Header_Sent_Callback();
-        I2C1->SR1 &= ~I2C_SR1_ADD10; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_STOPF) {
-        Stop_Received_Callback();
-        I2C1->CR1 |= I2C_CR1_PE; // Clear the STOPF flag by writing to CR1
-    }
-    if (I2C1->SR1 & I2C_SR1_BTF) {
-        Data_Byte_Transfer_Finished_Callback();
-        I2C1->SR1 &= ~I2C_SR1_BTF; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_RXNE) {
-        Receive_Buffer_Not_Empty_Callback();
-        I2C1->SR1 &= ~I2C_SR1_RXNE; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_TXE) {
-        Transmit_Buffer_Empty_Callback();
-        I2C1->SR1 &= ~I2C_SR1_TXE; // Clear the interrupt flag
-    }
-}
-
-void I2C1_Error_Interrupt_Handler(void){
-
-	if (I2C1->SR1 & I2C_SR1_BERR) {
-        Bus_Error_Callback();
-        I2C1->SR1 &= ~I2C_SR1_BERR; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_ARLO) {
-        Arbitration_Loss_Callback();
-        I2C1->SR1 &= ~I2C_SR1_ARLO; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_AF) {
-        Acknowledge_Failure_Callback();
-        I2C1->SR1 &= ~I2C_SR1_AF; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_OVR) {
-        Overrun_Underrun_Callback();
-        I2C1->SR1 &= ~I2C_SR1_OVR; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_PECERR) {
-        PEC_Error_Callback();
-        I2C1->SR1 &= ~I2C_SR1_PECERR; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_TIMEOUT) {
-        Timeout_Tlow_Error_Callback();
-        I2C1->SR1 &= ~I2C_SR1_TIMEOUT; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_SMBALERT) {
-        SMBus_Alert_Callback();
-        I2C1->SR1 &= ~I2C_SR1_SMBALERT; // Clear the interrupt flag
-    }
-}
 
 
 void TIM1_init(void){
@@ -337,7 +610,7 @@ void TIM2_init(){
 	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;		// Enable TIM2   Clock
 
 	TIM2->PSC = 0; // Prescaler
-	TIM2->ARR = 0xFFFF;  // Max auto-reload value
+	TIM2->ARR = 0xFFFFFFFF;  // Max auto-reload value
 	TIM2->CR1 |= TIM_CR1_CEN; // Enable TIM2
 }
 
@@ -487,7 +760,7 @@ float Current_Controller(float EI){
 }
 
 
-
+extern "C" {
 void TIM1_UP_TIM10_IRQHandler(void) {
     if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
 		TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
@@ -591,89 +864,4 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 		CAPTURE_COMP_W = requested_duty_cycle_W * 500*SYSCLK/PWMCLK;
     }
 }
-
-
-void FPU_IRQHandler(void){
-	while(1);
-}
-
-void HardFault_Handler(void){
-	while(1);
-}
-
-void MemManage_Handler(void){
-	while(1);
-}
-
-void BusFault_Handler(void){
-	while(1);
-}
-
-void UsageFault_Handler(void){
-	while(1);
-}
-
-
-
-
-void Start_Bit_Sent_Callback(void){
-	while(1);
-}
-
-void Address_Sent_Callback(void){
-	while(1);
-}
-
-void Ten_Bit_Header_Sent_Callback(void){
-	while(1);
-}
-
-void Stop_Received_Callback(void){
-	while(1);
-}
-
-void Data_Byte_Transfer_Finished_Callback(void){
-	while(1);
-}
-
-void Receive_Buffer_Not_Empty_Callback(void){
-	while(1);
-}
-
-void Transmit_Buffer_Empty_Callback(void){
-	
-
-
-
-}
-
-
-
-
-void Bus_Error_Callback(void){
-	while(1);
-}
-
-void Arbitration_Loss_Callback(void){
-	while(1);
-}
-
-void Acknowledge_Failure_Callback(void){
-	while(1);
-}
-
-void Overrun_Underrun_Callback(void){
-	while(1);
-}
-
-void PEC_Error_Callback(void){
-	while(1);
-}
-
-void Timeout_Tlow_Error_Callback(void){
-	while(1);
-}
-
-void SMBus_Alert_Callback(void){
-	while(1);
 }

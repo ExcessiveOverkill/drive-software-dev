@@ -6,7 +6,8 @@
 	],
 	"settings": {
 		"files.associations": {
-			"cmath": "c"
+			"cmath": "c",
+			"cstdint": "cpp"
 		}
 	}
 }

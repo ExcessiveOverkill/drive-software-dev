@@ -16,7 +16,7 @@ message("Build type: "              ${CMAKE_BUILD_TYPE})
 #
 # Core project settings
 #
-project(STM32F413RG_Blinky)
+project(drive_firmware)
 enable_language(C CXX ASM)
 
 #
@@ -40,7 +40,8 @@ set(EXECUTABLE                      ${CMAKE_PROJECT_NAME})
 # List of source files to compile
 #
 set(sources_SRCS
-    ${PROJ_PATH}/Core/Src/main.c
+    ${PROJ_PATH}/Core/Src/user_IO.cpp
+    ${PROJ_PATH}/Core/Src/main.cpp
     ${PROJ_PATH}/Core/Src/syscalls.c
     ${PROJ_PATH}/Core/Src/sysmem.c
     ${PROJ_PATH}/Core/Src/system_stm32f4xx.c
