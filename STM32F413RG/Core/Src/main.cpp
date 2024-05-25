@@ -461,6 +461,33 @@ void delay_us(uint32_t time_us);
 
 void CPU_init(void);
 
+void I2C1_init(void);
+void I2C1_Start_Transmit(uint8_t address, uint8_t* data, uint8_t size) ;
+
+void I2C1_Event_Interrupt_Handler(void);
+void I2C1_Error_Interrupt_Handler(void);
+void Start_Bit_Sent_Callback(void);
+void Address_Sent_Callback(void);
+void Ten_Bit_Header_Sent_Callback(void);
+void Stop_Received_Callback(void);
+void Data_Byte_Transfer_Finished_Callback(void);
+void Receive_Buffer_Not_Empty_Callback(void);
+void Transmit_Buffer_Empty_Callback(void);
+void Bus_Error_Callback(void);
+void Arbitration_Loss_Callback(void);
+void Acknowledge_Failure_Callback(void);
+void Overrun_Underrun_Callback(void);
+void PEC_Error_Callback(void);
+void Timeout_Tlow_Error_Callback(void);
+void SMBus_Alert_Callback(void);
+
+void USART6_init(void);
+void USART6_Error_Interrupt_Handler(void);
+void Parity_Error_Callback(void);
+void Framing_Error_Callback(void);
+void Noise_Detected_Error_Callback(void);
+void Overrun_Error_Callback(void);
+
 void TIM1_init(void);
 
 void TIM2_init(void);
@@ -546,11 +573,66 @@ void I2C1_EV_IRQHandler(void){
 	userIO.I2C1_Event_Interrupt();
 }
 
-void I2C1_ER_IRQHandler(void){
-	userIO.I2C1_Error_Interrupt();
-}
+void I2C1_Error_Interrupt_Handler(void){
+
+	if (I2C1->SR1 & I2C_SR1_BERR) {
+        Bus_Error_Callback();
+        I2C1->SR1 &= ~I2C_SR1_BERR; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_ARLO) {
+        Arbitration_Loss_Callback();
+        I2C1->SR1 &= ~I2C_SR1_ARLO; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_AF) {
+        Acknowledge_Failure_Callback();
+        I2C1->SR1 &= ~I2C_SR1_AF; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_OVR) {
+        Overrun_Underrun_Callback();
+        I2C1->SR1 &= ~I2C_SR1_OVR; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_PECERR) {
+        PEC_Error_Callback();
+        I2C1->SR1 &= ~I2C_SR1_PECERR; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_TIMEOUT) {
+        Timeout_Tlow_Error_Callback();
+        I2C1->SR1 &= ~I2C_SR1_TIMEOUT; // Clear the interrupt flag
+    }
+    if (I2C1->SR1 & I2C_SR1_SMBALERT) {
+        SMBus_Alert_Callback();
+        I2C1->SR1 &= ~I2C_SR1_SMBALERT; // Clear the interrupt flag
+    }
 }
 
+void USART6_init(void){
+	USART6->CR1 |= USART_CR1_UE;	// Enable USART1
+	USART6->CR3 |= USART_CR3_DMAR;	// Enable DMA
+	USART6->BRR |= USART_BRR_DIV_Mantissa;	// Program Baud rate Mantissa
+	USART6->BRR |= USART_BRR_DIV_Fraction;	// Program Baud rate fraction
+	USART6->CR1 |= USART_CR1_RE;	// Enable Receiver
+
+}
+
+void USART6_Error_Interrupt_Handler(void){
+
+	if (USART6->SR & USART_SR_PE) {
+        Parity_Error_Callback();
+		// Cleared by read or write to USART_DR_DR
+    }
+	if (USART6->SR & USART_SR_FE) {
+        Framing_Error_Callback();
+		// Cleared by reading USART_DR_DR 
+    }
+	if (USART6->SR & USART_SR_NE) {
+        Noise_Detected_Error_Callback();
+		// Cleared by reading USART_DR_DR 
+    }
+	if (USART6->SR & USART_SR_ORE) {
+        Overrun_Error_Callback();
+		// Cleared by reading USART_DR_DR 
+    }
+}
 
 
 void TIM1_init(void){
@@ -864,4 +946,108 @@ void TIM1_UP_TIM10_IRQHandler(void) {
 		CAPTURE_COMP_W = requested_duty_cycle_W * 500*SYSCLK/PWMCLK;
     }
 }
+
+
+void FPU_IRQHandler(void){
+	while(1);
+}
+
+void HardFault_Handler(void){
+	while(1);
+}
+
+void MemManage_Handler(void){
+	while(1);
+}
+
+void BusFault_Handler(void){
+	while(1);
+}
+
+void UsageFault_Handler(void){
+	while(1);
+}
+
+
+
+
+void Start_Bit_Sent_Callback(void){
+	while(1);
+}
+
+void Address_Sent_Callback(void){
+	while(1);
+}
+
+void Ten_Bit_Header_Sent_Callback(void){
+	while(1);
+}
+
+void Stop_Received_Callback(void){
+	while(1);
+}
+
+void Data_Byte_Transfer_Finished_Callback(void){
+	while(1);
+}
+
+void Receive_Buffer_Not_Empty_Callback(void){
+	while(1);
+}
+
+void Transmit_Buffer_Empty_Callback(void){
+	
+
+
+
+}
+
+
+
+
+void Bus_Error_Callback(void){
+	while(1);
+}
+
+void Arbitration_Loss_Callback(void){
+	while(1);
+}
+
+void Acknowledge_Failure_Callback(void){
+	while(1);
+}
+
+void Overrun_Underrun_Callback(void){
+	while(1);
+}
+
+void PEC_Error_Callback(void){
+	while(1);
+}
+
+void Timeout_Tlow_Error_Callback(void){
+	while(1);
+}
+
+void SMBus_Alert_Callback(void){
+	while(1);
+}
+
+
+
+
+void Parity_Error_Callback(void){
+	while(1);
+}
+
+void Framing_Error_Callback(void){
+	while(1);
+}
+
+void Noise_Detected_Error_Callback(void){
+	while(1);
+}
+
+void Overrun_Error_Callback(void){
+	while(1);
 }
