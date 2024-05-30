@@ -615,9 +615,9 @@ void TIM1_init(void){
 
 	uint32_t deadtime_ticks = (DEADTIME * SYSCLK) / 1000;
 	TIM1->BDTR |= deadtime_ticks & TIM_BDTR_DTG;
-	TIM1->BDTR |= TIM_BDTR_AOE;
+	// TIM1->BDTR |= TIM_BDTR_AOE; // TODO: remove automatic restart support by adding a separate call to re-enable main outputs
 	TIM1->BDTR |= TIM_BDTR_BKP;
-	__NOP();__NOP();__NOP();		// Inserts a delay of 3 clock cycles
+	__NOP();__NOP();__NOP();		// Inserts a delay of 3 clock cycles	//TODO: investigate NOPs
 	TIM1->BDTR |= TIM_BDTR_BKE;		// Enable Brake (Safe Torque Off)
 	__NOP();__NOP();__NOP();		// Inserts a delay of 3 clock cycles
 
@@ -658,7 +658,7 @@ void PWM_enable(){
 
 	TIM1->CNT = 0;					// Resest PWM counter
 	TIM1->CR1 |= TIM_CR1_CEN;		// Enable PWM timer TIM1
-	TIM1->BDTR |= TIM_BDTR_MOE;     // Main output enable (for advanced timers)
+	TIM1->BDTR |= TIM_BDTR_MOE;     // Main output enable
 
 	// Start DFSDM ADC conversions
 	DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 1 Conversion
