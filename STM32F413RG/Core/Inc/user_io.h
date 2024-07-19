@@ -6,9 +6,8 @@
   ******************************************************************************
 **/
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __USER_IO_H
-#define __USER_IO_H
+/* Prevent recursive inclusion -------------------------------------*/
+#pragma once
 
 #include "stm32f413xx.h"
 #include <assert.h>
@@ -51,7 +50,6 @@ class user_io{
           read_send_repeat_device_address_wait,
           read_send_nak,
           read_done
-
         };
 
         enum update_states{
@@ -85,7 +83,6 @@ class user_io{
           blink_fast = 8,
           on = 16
         };
-
         
         user_io(uint32_t update_period_);
         
@@ -102,7 +99,4 @@ class user_io{
         void I2C1_Event_Interrupt(void);
 
         void I2C1_Error_Interrupt(void);
-
 };
-
-#endif

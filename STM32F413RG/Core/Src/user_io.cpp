@@ -98,9 +98,9 @@ uint32_t user_io::get_switch_states(void){
 void user_io::set_led_state(uint32_t led_select_, uint32_t led_mode_){
     assert(led_mode_ <= on);   // user tried using a mode not supported
 
-    if(led_select_ & 0b1) led_modes[0] = led_mode_;
-    if(led_select_ & 0b10) led_modes[1] = led_mode_;
-    if(led_select_ & 0b100) led_modes[2] = led_mode_;
+    if(led_select_ & 0b0001) led_modes[0] = led_mode_;
+    if(led_select_ & 0b0010) led_modes[1] = led_mode_;
+    if(led_select_ & 0b0100) led_modes[2] = led_mode_;
     if(led_select_ & 0b1000) led_modes[3] = led_mode_;
 }
 
