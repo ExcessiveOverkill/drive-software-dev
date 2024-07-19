@@ -31,9 +31,8 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <math.h>
 #include "stm32f413xx.h"
-#include "user_io.h"
+
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -63,8 +62,13 @@ extern "C" {
 /* USER CODE BEGIN Private defines */
 
 #define pi 3.141592653589793
-#define SYSCLK		100		// (MHz) System Clock in MHz
-#define SYSTICK_FREQUENCY 100    // (Hz)  do not set above 1khz
+
+#include "user_io.h"
+#include "adc_interface.h"
+#include "current_sense_interface.h"
+#include "sto.h"
+#include "phase_pwm.h"
+#include "communication.h"
 
 /* USER CODE END Private defines */
 

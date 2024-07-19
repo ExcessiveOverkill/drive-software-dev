@@ -40,6 +40,11 @@ set(EXECUTABLE                      ${CMAKE_PROJECT_NAME})
 # List of source files to compile
 #
 set(sources_SRCS
+    ${PROJ_PATH}/Core/Src/communication.cpp
+    ${PROJ_PATH}/Core/Src/sto.cpp
+    ${PROJ_PATH}/Core/Src/phase_pwm.cpp
+    ${PROJ_PATH}/Core/Src/current_sense_interface.cpp
+    ${PROJ_PATH}/Core/Src/adc_interface.cpp
     ${PROJ_PATH}/Core/Src/user_IO.cpp
     ${PROJ_PATH}/Core/Src/main.cpp
     ${PROJ_PATH}/Core/Src/syscalls.c
@@ -100,6 +105,10 @@ target_link_options(${EXECUTABLE} PRIVATE
     -lsupc++
     -Wl,--end-group
     -Wl,--print-memory-usage
+)
+
+add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+    COMMAND python ${PROJ_PATH}/autoGen.py
 )
 
 # Execute post-build to print size

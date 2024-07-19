@@ -1,26 +1,13 @@
 #include "main.h"
 
-#define ADCCLK		20		// (MHz) ADC output clock
-#define DEADTIME	100		// (ns)  PWM Deadtime (ns)
-#define PWMCLK		25		// (KHz) PWM Output Frequency
+float Kp = .01;		// Proportional gain for current controller (V/A)
+float Ki = .02;		// Integral gain for current controller (V/A/s)
+float I_term_limit = 12;
 
-#define PWM_ticks 1000*SYSCLK/PWMCLK/2
+#define LOW_TEST_CURRENT 0.0
+#define HIGH_TEST_CURRENT 3.0
 
-#define ADC_VOLTAGE 0.250			// (V) ADC optimal shunt input voltage
-#define ADC_MIN_VALUE_PERC 0.1094
-#define DFSDM_DIVISIONS 8388608
-#define DFSDM_FOSR (1000*ADCCLK/PWMCLK/2 - 2)
-
-#define VBUS 12
-#define SHUNT_RESISTANCE 0.005	// (Ohms) Current shunt resistance
-
-
-float Kp = .1;		// Proportional gain for current controller (V/A)
-float Ki = .1;		// Integral gain for current controller (V/A/s)
-float I_term_limit = 3;
-
-
-float requested_Iq = 3.0;
+float requested_Iq = LOW_TEST_CURRENT;
 float requested_Id = 0.0;
 float electrical_rads_per_second = 10.0;
 
@@ -31,12 +18,6 @@ uint32_t CAPTURE_COMP_U = PWM_ticks * 0.5;
 uint32_t CAPTURE_COMP_V = PWM_ticks * 0.5;
 uint32_t CAPTURE_COMP_W = PWM_ticks * 0.5;
 float I_Term = 0;	// Integral term for current controller (V)
-
-// TODO: Remove these...
-uint8_t I2C_address = 0x20;
-uint8_t I2C_Register_Address = 0b10100000;
-uint8_t* I2C_data = &I2C_Register_Address;
-uint8_t I2C_data_size = 1;
 
 extern "C" {
 
@@ -300,13 +281,13 @@ void TIM7_IRQHandler(void){
 	while(1);
 }   
 
-void DMA2_Stream0_IRQHandler(void){
-	while(1);
-}   
+// void DMA2_Stream0_IRQHandler(void){
+// 	while(1);
+// }   
 
-void DMA2_Stream1_IRQHandler(void){
-	while(1);
-}   
+// void DMA2_Stream1_IRQHandler(void){
+// 	while(1);
+// }   
 
 void DMA2_Stream2_IRQHandler(void){
 	while(1);
@@ -360,9 +341,9 @@ void DMA2_Stream7_IRQHandler(void){
 	while(1);
 }   
 
-void USART6_IRQHandler(void){
-	while(1);
-}   
+// void USART6_IRQHandler(void){
+// 	while(1);
+// }   
 
 void I2C3_EV_IRQHandler(void){
 	while(1);
@@ -457,11 +438,11 @@ void DFSDM2_FLT3_IRQHandler(void){
 }   
 }
 
+
+
 void delay_us(uint32_t time_us);
 
 void CPU_init(void);
-
-void USART6_init(void);
 
 extern "C" {
 void USART6_Error_Interrupt_Handler(void);
@@ -471,27 +452,64 @@ void Noise_Detected_Error_Callback(void);
 void Overrun_Error_Callback(void);
 }
 
-void TIM1_init(void);
-
 void TIM2_init(void);
-void PWM_enable(void);
-
-void DFSDM2_init(void);
 
 int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q);
 int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C);
 
+uint64_t sysTick_counter = 0;	// counter that increments at SYSTICK_FREQUENCY
+
+uint32_t adc_power_on_delay_cycles = 0;	// PWM cycle counter to wait after enabling pwm to allow ADCs to power on
+
 user_io userIO(1000/SYSTICK_FREQUENCY);
+adc_interface adc(0);
+current_sense_interface currentSense(0);
+phase_pwm phasePWM(0);
+sto STO(0);
+communication comm(0);
+
+volatile bool phase_pwm_updated_flag = false;
+
+enum States {
+	STARTUP,
+	FAULT,
+	IDLE,
+	RUN
+};
+
+enum Enter_idle_steps {
+	CHECK_OK_TO_START,
+	ENABLE_STO,
+	IDLE_
+};
+
+enum Enter_run_steps {
+	ENABLE_PWM,
+	ENABLE_SHORT_CIRCUIT_DETECTION,
+	RUN_
+};
+
+enum Enter_fault_steps {
+	DISABLE_PWM,
+	DISABLE_STO,
+	FAULT_
+};
+
+int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q);
+int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C);
+float Current_Controller(float EI);
 
 int main(void){
 
+	enum States current_state = STARTUP;
+	enum States requested_state = IDLE;
+
+	enum Enter_run_steps enter_run_step = ENABLE_PWM;
+	enum Enter_idle_steps enter_idle_step = CHECK_OK_TO_START;
+	enum Enter_fault_steps enter_fault_step = DISABLE_PWM;
+
 	CPU_init();
-	// GPIO_init();
-	// TIM1_init();
 	TIM2_init();
-	// DFSDM2_init();
-	// PWM_enable();
-	//I2C1_init();
 
 	SysTick->LOAD = (SYSCLK*1000000/8) / SYSTICK_FREQUENCY;
 	
@@ -499,14 +517,290 @@ int main(void){
 
 	SysTick->CTRL = 0b11;	// enable counter and exception
 
-	delay_us(1000);
-
 	userIO.init();
+	adc.init();
+	currentSense.init();
+	phasePWM.init();
+	STO.init();
+	comm.init();
+
+	// test LEDs
+	userIO.set_led_state(0b1111, userIO.on);
+	delay_us(1000*1000);
+	userIO.set_led_state(0b1110, userIO.off);
+
+	current_state = FAULT;
+
+	requested_state = IDLE;
+
+	uint64_t last_idle_attempt_time = sysTick_counter;
+
+	uint64_t last_run_attempt_time = sysTick_counter;
+
+	uint64_t last_current_test_time = sysTick_counter;
 
 	while(1){
 
-		userIO.set_led_state(userIO.get_switch_states(), userIO.blink_fast);
-		userIO.set_led_state(~userIO.get_switch_states(), userIO.off);
+		if(current_state == FAULT && sysTick_counter>last_idle_attempt_time+(SYSTICK_FREQUENCY*1)){
+			requested_state = IDLE;
+			last_idle_attempt_time = sysTick_counter;
+			last_run_attempt_time = sysTick_counter;
+		}
+
+		if(current_state == IDLE && sysTick_counter>last_run_attempt_time+(SYSTICK_FREQUENCY*1)){
+			requested_state = RUN;
+			last_run_attempt_time = sysTick_counter;
+		}
+
+		
+
+
+		volatile uint32_t temp = comm.get_commutaion_angle();
+		theta = ((float)temp)/0xFFFF * (2*pi);
+		theta += pi/2;	// offset to match test fanuc encoder phase angle
+
+		if(temp > 0x8000){
+			userIO.set_led_state(0b1000, userIO.on);
+		}
+		else{
+			userIO.set_led_state(0b1000, userIO.off);
+		}
+
+		switch(current_state){
+			case STARTUP:
+				// we should never actually reach this since startup should already be done
+				break;
+
+			case FAULT:
+				// system experienced a critical fault and needed to shutdown
+				if(requested_state == IDLE){
+					switch(enter_idle_step){
+						case CHECK_OK_TO_START:
+							//	TODO: clear errors
+							
+							//	TODO: check everything to make sure we can exit fault state safely
+
+							// verify STO is ok
+							
+							if(STO.check_fault()){
+								enter_idle_step = CHECK_OK_TO_START;
+								requested_state = FAULT;
+								// TODO: specify fault
+								break;
+							}
+
+							// attempt to enable drive STO on rising edge of update flag
+							if(phase_pwm_updated_flag){
+								STO.enable();
+								enter_idle_step = ENABLE_STO;
+								phase_pwm_updated_flag = 0;
+							}
+							break;
+
+						case ENABLE_STO:
+
+							// check to see if drive was successfully enabled on next update cycle
+							if(phase_pwm_updated_flag){
+								phasePWM.clear_break_flag();
+								if(STO.output_allowed() && !phasePWM.break_flag_triggered()){
+									enter_idle_step = IDLE_;
+									phase_pwm_updated_flag = 0;
+								}
+								else{
+									enter_idle_step = CHECK_OK_TO_START;
+									requested_state = FAULT;
+									// TODO: specify fault
+									break;
+								}
+							}
+							break;
+
+						case IDLE_:
+							userIO.set_led_state(0b0001, userIO.blink_slow);
+							current_state = IDLE;
+							enter_idle_step = CHECK_OK_TO_START;
+							break;
+
+					}
+				}
+				break;
+
+			case IDLE:
+				// system is ok and ready to start
+
+				if(!STO.output_allowed()){
+					requested_state = FAULT;
+				}
+
+				if(requested_state == RUN){
+					switch(enter_run_step){
+						case ENABLE_PWM:	// switch on PWM outputs
+							phasePWM.enable();
+							enter_run_step = ENABLE_SHORT_CIRCUIT_DETECTION;
+							adc_power_on_delay_cycles = ADC_ENABLE_DELAY_CYCLES;
+						break;
+
+						case ENABLE_SHORT_CIRCUIT_DETECTION:	// clear any detected short flags and enable short detection
+							if(phase_pwm_updated_flag){
+								adc_power_on_delay_cycles--;
+								phase_pwm_updated_flag = 0;
+
+								if(adc_power_on_delay_cycles == 0){
+									currentSense.clear_short_circuit_detected();
+									currentSense.enable_short_circuit_detection();
+									currentSense.start_sample();
+									adc.start_sample();
+									enter_run_step = RUN_;
+							}
+							}
+							
+						break;
+
+						case RUN_:
+							userIO.set_led_state(0b0001, userIO.blink_fast);
+							enter_run_step = ENABLE_PWM;
+							current_state = RUN;
+						break;
+					
+					};
+				}
+
+				if(requested_state == FAULT){
+					switch(enter_fault_step){
+						case DISABLE_PWM:
+							phasePWM.disable();
+							currentSense.disable_short_circuit_detection();
+							enter_fault_step = DISABLE_STO;
+						break;
+
+						case DISABLE_STO:
+							STO.disable();
+							enter_fault_step = FAULT_;
+						break;
+
+						case FAULT_:
+							userIO.set_led_state(0b0001, userIO.on);
+							enter_fault_step = DISABLE_PWM;
+							current_state = FAULT;
+					};
+				}
+				
+				break;
+
+			case RUN:
+				// PWM enabled and control loops running
+				if(!STO.output_allowed()){
+					requested_state = FAULT;
+				}
+
+				// if(sysTick_counter > last_current_test_time + SYSTICK_FREQUENCY*1){
+				// 	last_current_test_time = sysTick_counter;
+
+				// 	if(requested_Iq == HIGH_TEST_CURRENT){
+				// 		requested_Iq = LOW_TEST_CURRENT;
+				// 	}
+				// 	else{
+				// 		requested_Iq = HIGH_TEST_CURRENT;
+				// 	}
+				// }
+
+				requested_Iq = -((float)comm.get_current_command_milliamps()) / 500.0;
+
+				if(requested_Iq > 8.0)requested_Iq = 8.0;
+				if(requested_Iq < -8.0)requested_Iq = -8.0;
+
+				///////////////////// Current Control Section /////////////////////
+
+				if(phase_pwm_updated_flag){		// this flag signifies the main PWM counter update has occured
+					
+					currentSense.get_currents();
+					currentSense.start_sample();
+
+					
+					float measured_Id;
+					float measured_Iq;
+
+					Clarke_and_Park_Transform(theta, (float)currentSense.phase_U_milliamps/1000.0, (float)currentSense.phase_V_milliamps/1000.0, (float)currentSense.phase_W_milliamps/1000.0, &measured_Id, &measured_Iq);
+
+					float error_Iq = requested_Iq - measured_Iq;
+					float error_Id = requested_Id - measured_Id;
+
+					float requested_Vq = Current_Controller(error_Iq);
+					float requested_Vd = Current_Controller(error_Id);
+
+					float requested_duty_cycle_Q = requested_Vq / (0.5*((float)adc.get_dc_bus_millivolts())/1000.0);
+					float requested_duty_cycle_D = requested_Vd / (0.5*((float)adc.get_dc_bus_millivolts())/1000.0);
+
+					float requested_duty_cycle_U;
+					float requested_duty_cycle_V;
+					float requested_duty_cycle_W;
+
+					Inverse_Carke_and_Park_Transform(theta, requested_duty_cycle_D, requested_duty_cycle_Q, &requested_duty_cycle_U, &requested_duty_cycle_V, &requested_duty_cycle_W);
+
+					if (requested_duty_cycle_U > (float)0.95){
+						requested_duty_cycle_U = 0.95;
+					}
+					if (requested_duty_cycle_U < (float)-0.95){
+						requested_duty_cycle_U = -0.95;
+					}
+
+					if (requested_duty_cycle_V > (float)0.95){
+						requested_duty_cycle_V = 0.95;
+					}
+					if (requested_duty_cycle_V < (float)-0.95){
+						requested_duty_cycle_V = -0.95;
+					}
+
+					if (requested_duty_cycle_W > (float)0.95){
+						requested_duty_cycle_W = 0.95;
+					}
+					if (requested_duty_cycle_W < (float)-0.95){
+						requested_duty_cycle_W = -0.95;
+					}
+
+					requested_duty_cycle_U = (requested_duty_cycle_U + 1)/2;
+					requested_duty_cycle_V = (requested_duty_cycle_V + 1)/2;
+					requested_duty_cycle_W = (requested_duty_cycle_W + 1)/2;
+
+					CAPTURE_COMP_U = requested_duty_cycle_U * 500*SYSCLK/PWMCLK;
+					CAPTURE_COMP_V = requested_duty_cycle_V * 500*SYSCLK/PWMCLK;
+					CAPTURE_COMP_W = requested_duty_cycle_W * 500*SYSCLK/PWMCLK;
+
+					adc.start_sample();
+
+					phase_pwm_updated_flag = 0;
+				}
+
+				//////////////////////////////////////////////////////////////////
+
+				if(requested_state == FAULT){
+					switch(enter_fault_step){
+						case DISABLE_PWM:
+							phasePWM.disable();
+							currentSense.disable_short_circuit_detection();
+							enter_fault_step = DISABLE_STO;
+						break;
+
+						case DISABLE_STO:
+							STO.disable();
+							enter_fault_step = FAULT_;
+						break;
+
+						case FAULT_:
+							userIO.set_led_state(0b0001, userIO.on);
+							enter_fault_step = DISABLE_PWM;
+							current_state = FAULT;
+					};
+				}
+				break;
+		}
+
+		// currentSense.start_sample();
+		// delay_us(1000);
+		// currentSense.get_currents();
+		//adc.start_sample();
+		//userIO.set_led_state(userIO.get_switch_states(), userIO.blink_fast);
+		//userIO.set_led_state(~userIO.get_switch_states(), userIO.off);
 
 	}
 }
@@ -550,20 +844,34 @@ void CPU_init(void){
 extern "C" {
 void SysTick_Handler(void){		// called at SYSTICK_FREQUENCY
 	userIO.update();
+	sysTick_counter++;
 }   
 
 void I2C1_EV_IRQHandler(void){
 	userIO.I2C1_Event_Interrupt();
 }
+
+void DMA2_Stream0_IRQHandler(void){
+	adc.dma_interrupt_handler();
 }
 
-void USART6_init(void){
-	USART6->CR1 |= USART_CR1_UE;	// Enable USART1
-	USART6->CR3 |= USART_CR3_DMAR;	// Enable DMA
-	USART6->BRR |= USART_BRR_DIV_Mantissa;	// Program Baud rate Mantissa
-	USART6->BRR |= USART_BRR_DIV_Fraction;	// Program Baud rate fraction
-	USART6->CR1 |= USART_CR1_RE;	// Enable Receiver
+void DMA2_Stream1_IRQHandler(void){
+	comm.dma_stream1_interrupt_handler();
+}
 
+void TIM1_UP_TIM10_IRQHandler(void) {
+	if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
+ 		TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
+		TIM1->CCR1 = CAPTURE_COMP_U;
+		TIM1->CCR2 = CAPTURE_COMP_V;
+		TIM1->CCR3 = CAPTURE_COMP_W;
+		phase_pwm_updated_flag = true;
+	}
+}
+
+void USART6_IRQHandler(void){
+	comm.usart6_interrupt_handler();
+}   
 }
 
 extern "C" {
@@ -588,57 +896,6 @@ void USART6_Error_Interrupt_Handler(void){
 }
 }
 
-void TIM1_init(void){
-
-	RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;		// Enable TIM1   Clock
-
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;	// Enable GPIOA  Clock
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;    // Enable GPIOB  Clock
-
-	GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODER8)  | GPIO_MODER_MODER8_1;	// Set UH  (PA8)  to AF mode
-	GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODER9)  | GPIO_MODER_MODER9_1;	// Set VH  (PA9)  to AF mode
-	GPIOA->MODER = (GPIOA->MODER & ~GPIO_MODER_MODER10) | GPIO_MODER_MODER10_1;	// Set WH  (PA10) to AF mode
-	GPIOB->MODER = (GPIOB->MODER & ~GPIO_MODER_MODER13) | GPIO_MODER_MODER13_1;	// Set UL  (PB13) to AF mode
-	GPIOB->MODER = (GPIOB->MODER & ~GPIO_MODER_MODER14) | GPIO_MODER_MODER14_1;	// Set VL  (PB14) to AF mode
-	GPIOB->MODER = (GPIOB->MODER & ~GPIO_MODER_MODER15) | GPIO_MODER_MODER15_1;	// Set WL  (PB15) to AF mode
-	GPIOB->MODER = (GPIOB->MODER & ~GPIO_MODER_MODER12) | GPIO_MODER_MODER12_1;	// Set STO (PB12) to AF mode
-
-
-	GPIOA->AFR[1] |= 1 << (4 * (8 - 8));	// Set UH  (PA8)  AF to TIM1_CH1
-	GPIOA->AFR[1] |= 1 << (4 * (9 - 8));	// Set VH  (PA9)  AF to TIM1_CH2
-	GPIOA->AFR[1] |= 1 << (4 * (10 - 8));	// Set WH  (PA10) AF to TIM1_CH3
-	GPIOB->AFR[1] |= 1 << (4 * (13 - 8));	// Set UL  (PB13) AF to TIM1_CH1N
-	GPIOB->AFR[1] |= 1 << (4 * (14 - 8));	// Set VL  (PB14) AF to TIM1_CH2N
-	GPIOB->AFR[1] |= 1 << (4 * (15 - 8));	// Set WL  (PB15) AF to TIM1_CH3N
-	GPIOB->AFR[1] |= 1 << (4 * (12 - 8));	// Set STO (PB12) AF to TIM1_BKIN
-
-
-	uint32_t deadtime_ticks = (DEADTIME * SYSCLK) / 1000;
-	TIM1->BDTR |= deadtime_ticks & TIM_BDTR_DTG;
-	// TIM1->BDTR |= TIM_BDTR_AOE; // TODO: remove automatic restart support by adding a separate call to re-enable main outputs
-	TIM1->BDTR |= TIM_BDTR_BKP;
-	__NOP();__NOP();__NOP();		// Inserts a delay of 3 clock cycles	//TODO: investigate NOPs
-	TIM1->BDTR |= TIM_BDTR_BKE;		// Enable Brake (Safe Torque Off)
-	__NOP();__NOP();__NOP();		// Inserts a delay of 3 clock cycles
-
-	TIM1->CR1 |= TIM_CR1_CMS;     	// Set center-aligned mode
-	TIM1->CR1 |= TIM_CR1_ARPE;		// Enable Auto-reload preload
-	TIM1->ARR = 500*SYSCLK/PWMCLK;  // Auto-reload value for PWM frequency
-
-	TIM1->CCMR1 |= TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2; // PWM mode 1 on Channel 1
-	TIM1->CCMR1 |= TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2; // PWM mode 1 on Channel 2
-	TIM1->CCMR2 |= TIM_CCMR2_OC3M_1 | TIM_CCMR2_OC3M_2; // PWM mode 1 on Channel 3
-
-	TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC1NE; // Enable CH1 and CH1N
-	TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC2NE; // Enable CH1 and CH1N
-	TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE; // Enable CH1 and CH1N
-
-	TIM1->DIER |= TIM_DIER_UIE; // Enable Update Interrupt
-	
-	NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
-	// NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 1); // Set priority as needed
-	// __enable_irq();
-}
 
 void TIM2_init(){
 
@@ -650,83 +907,6 @@ void TIM2_init(){
 }
 
 
-void PWM_enable(){
-
-	TIM1->CCR1 = PWM_ticks * 0.5;
-	TIM1->CCR2 = PWM_ticks * 0.5;
-	TIM1->CCR3 = PWM_ticks * 0.5;
-
-	TIM1->CNT = 0;					// Resest PWM counter
-	TIM1->CR1 |= TIM_CR1_CEN;		// Enable PWM timer TIM1
-	TIM1->BDTR |= TIM_BDTR_MOE;     // Main output enable
-
-	// Start DFSDM ADC conversions
-	DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 1 Conversion
-	DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 2 Conversion
-	DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 3 Conversion
-}
-
-
-void DFSDM2_init(){
-
-	RCC->APB2ENR |= RCC_APB2ENR_DFSDM2EN;   // Enable DFSDM2 Clock
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;    // Enable GPIOB  Clock
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;    // Enable GPIOC  Clock
-
-	// GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED10_1;
-
-	GPIOB->MODER |= (2 << (2 * 9));				// Set U_Data (PB9) to AF mode
-	GPIOC->MODER |= (2 << (2 * 5));				// Set V_Data (PC5) to AF mode
-	GPIOC->MODER |= (2 << (2 * 9));				// Set W_Data (PC9) to AF mode
-	GPIOB->MODER |= (2 << (2 * 10));			// Set ADC_CLK (PB10) to AF mode
-	GPIOB->AFR[1] |= (6  << (4 * (9  - 8)));	// Set PB9  AF to DFSDM2_ DATIN1
-	GPIOC->AFR[0] |= (3  << (4 * (5  - 0)));	// Set PC5  AF to DFSDM2_ DATIN2
-	GPIOC->AFR[1] |= (7  << (4 * (9  - 8)));	// Set PC9  AF to DFSDM2_ DATIN3
-	GPIOB->AFR[1] |= (10 << (4 * (10 - 8)));	// Set PB10 AF to DFSDM2_CKOUT
-
-	// GPIOC->MODER |= (1 << (2 * 10));	// Set STO_EN (PC10) to Output Mode 
-	// GPIOC->MODER |= (0 << (2 * 11));	// Set STO_CH1_MCU_FBK (PC11) to Input Mode 
-	// GPIOC->MODER |= (0 << (2 * 12));	// Set STO_CH2_MCU_FBK (PC12) to Input Mode 
-
-	DFSDM2_Channel0->CHCFGR1 |= ((SYSCLK/ADCCLK - 1) << DFSDM_CHCFGR1_CKOUTDIV_Pos);
-
-	DFSDM2_Channel1->CHCFGR1 |= (1 << DFSDM_CHCFGR1_SPICKSEL_Pos);	// Set channel 1 clock source CKOUT
-	DFSDM2_Channel2->CHCFGR1 |= (1 << DFSDM_CHCFGR1_SPICKSEL_Pos);	// Set channel 2 clock source CKOUT
-	DFSDM2_Channel3->CHCFGR1 |= (1 << DFSDM_CHCFGR1_SPICKSEL_Pos);	// Set channel 3 clock source CKOUT
-
-	DFSDM2_Filter1->FLTCR1 |= (1 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 1 to channel 1
-	DFSDM2_Filter2->FLTCR1 |= (2 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 2 to channel 2
-	DFSDM2_Filter3->FLTCR1 |= (3 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 3 to channel 3
-
-//	DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RCONT;	// Filter 1 Continuous mode
-//	DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RCONT;	// Filter 2 Continuous mode
-//	DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RCONT;	// Filter 3 Continuous mode
-
-	DFSDM2_Filter1->FLTFCR |= (3 << DFSDM_FLTFCR_FORD_Pos);	// Set Filter 1 to Sinc^3
-	DFSDM2_Filter2->FLTFCR |= (3 << DFSDM_FLTFCR_FORD_Pos);	// Set Filter 2 to Sinc^3
-	DFSDM2_Filter3->FLTFCR |= (3 << DFSDM_FLTFCR_FORD_Pos);	// Set Filter 3 to Sinc^3
-
-	DFSDM2_Filter1->FLTFCR |= (DFSDM_FOSR << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 1 oversample
-	DFSDM2_Filter2->FLTFCR |= (DFSDM_FOSR << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 2 oversample
-	DFSDM2_Filter3->FLTFCR |= (DFSDM_FOSR << DFSDM_FLTFCR_FOSR_Pos);	// Set Filter 3 oversample
-
-	DFSDM2_Channel1->CHCFGR2 |= 8 << DFSDM_CHCFGR2_DTRBS_Pos; 	// Right-shift data by 8 to fit 32bit into 24bit
-	DFSDM2_Channel2->CHCFGR2 |= 8 << DFSDM_CHCFGR2_DTRBS_Pos; 	// Right-shift data by 8 to fit 32bit into 24bit
-	DFSDM2_Channel3->CHCFGR2 |= 8 << DFSDM_CHCFGR2_DTRBS_Pos; 	// Right-shift data by 8 to fit 32bit into 24bit
-
-
-	//TODO: Initialize short circuit detector
-	//TODO: Initialize Analog Watchdog
-
-	DFSDM2_Channel1->CHCFGR1 |= DFSDM_CHCFGR1_CHEN; 	// Enable Channel 1
-	DFSDM2_Channel2->CHCFGR1 |= DFSDM_CHCFGR1_CHEN; 	// Enable Channel 2
-	DFSDM2_Channel3->CHCFGR1 |= DFSDM_CHCFGR1_CHEN; 	// Enable Channel 3
-	DFSDM2_Channel0->CHCFGR1 |= DFSDM_CHCFGR1_DFSDMEN; 	// Global enable DFSDM
-
-	DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_DFEN;	// Enable Filter 1
-	DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_DFEN;	// Enable Filter 2
-	DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_DFEN;	// Enable Filter 3
-}
 
 int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q){
     
@@ -796,109 +976,109 @@ float Current_Controller(float EI){
 
 
 extern "C" {
-void TIM1_UP_TIM10_IRQHandler(void) {
-    if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
-		TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
+// void TIM1_UP_TIM10_IRQHandler(void) {
+//     if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
+// 		TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
 		
-		if(!(DFSDM2_Filter1->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
-			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
-			return;
-		}
-		if(!(DFSDM2_Filter2->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
-			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
-			return;
-		}
-		if(!(DFSDM2_Filter3->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
-			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
-			return;
-		}
+// 		if(!(DFSDM2_Filter1->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
+// 			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
+// 			return;
+// 		}
+// 		if(!(DFSDM2_Filter2->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
+// 			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
+// 			return;
+// 		}
+// 		if(!(DFSDM2_Filter3->FLTISR & DFSDM_FLTISR_REOCF)){		// check if DFSDM conversion is complete
+// 			//TODO: handle missing conversion, this should ony happen once at startup since there is not previous data
+// 			return;
+// 		}
 
-		// set pwm exactly on edge based on data from last cycle
-		TIM1->CCR1 = CAPTURE_COMP_U;
-		TIM1->CCR2 = CAPTURE_COMP_V;
-		TIM1->CCR3 = CAPTURE_COMP_W;
+// 		// set pwm exactly on edge based on data from last cycle
+// 		TIM1->CCR1 = CAPTURE_COMP_U;
+// 		TIM1->CCR2 = CAPTURE_COMP_V;
+// 		TIM1->CCR3 = CAPTURE_COMP_W;
 
-		theta += electrical_rads_per_second * (2*pi) * (.5/(PWMCLK*1000));
+// 		theta += electrical_rads_per_second * (2*pi) * (.5/(PWMCLK*1000));
 
-		if (theta >= (2*pi)){
-			theta = 0.0;
-		}
+// 		if (theta >= (2*pi)){
+// 			theta = 0.0;
+// 		}
 
 
-		// get conversion data from DFSDM
-		// TODO: consider shifting a more optimal number of bit to get higher resolution
-		int32_t MI_U_Raw = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00));
-		int32_t MI_V_Raw = ((int32_t)(DFSDM2_Filter2->FLTRDATAR & 0xFFFFFF00));
-		int32_t MI_W_Raw = ((int32_t)(DFSDM2_Filter3->FLTRDATAR & 0xFFFFFF00));
+// 		// get conversion data from DFSDM
+// 		// TODO: consider shifting a more optimal number of bit to get higher resolution
+// 		int32_t MI_U_Raw = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00));
+// 		int32_t MI_V_Raw = ((int32_t)(DFSDM2_Filter2->FLTRDATAR & 0xFFFFFF00));
+// 		int32_t MI_W_Raw = ((int32_t)(DFSDM2_Filter3->FLTRDATAR & 0xFFFFFF00));
 
-		// start all conversions for next cycle
-        // TODO: Ensure DFSDM conversions occur on PWM timer direction flips
-		DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 1 Conversion
-		DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 2 Conversion
-		DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 3 Conversion
+// 		// start all conversions for next cycle
+//         // TODO: Ensure DFSDM conversions occur on PWM timer direction flips
+// 		DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 1 Conversion
+// 		DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 2 Conversion
+// 		DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSWSTART;	// Start Filter 3 Conversion
 
-		float measured_current_U = -MI_U_Raw;
-		measured_current_U *= ADC_VOLTAGE;
-		measured_current_U /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
+// 		float measured_current_U = -MI_U_Raw;
+// 		measured_current_U *= ADC_VOLTAGE;
+// 		measured_current_U /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
 
-		float measured_current_V = -MI_V_Raw;
-		measured_current_V *= ADC_VOLTAGE;
-		measured_current_V /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
+// 		float measured_current_V = -MI_V_Raw;
+// 		measured_current_V *= ADC_VOLTAGE;
+// 		measured_current_V /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
 
-		float measured_current_W = -MI_W_Raw;
-		measured_current_W *= ADC_VOLTAGE;
-		measured_current_W /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
+// 		float measured_current_W = -MI_W_Raw;
+// 		measured_current_W *= ADC_VOLTAGE;
+// 		measured_current_W /= (float)(pow(DFSDM_FOSR+1, 3) * (1.0 - ADC_MIN_VALUE_PERC*2.0) * SHUNT_RESISTANCE);
 
-		float measured_Id;
-		float measured_Iq;
+// 		float measured_Id;
+// 		float measured_Iq;
 
-		Clarke_and_Park_Transform(theta, measured_current_U, measured_current_V, measured_current_W, &measured_Id, &measured_Iq);
+// 		Clarke_and_Park_Transform(theta, measured_current_U, measured_current_V, measured_current_W, &measured_Id, &measured_Iq);
 
-		float error_Iq = requested_Iq - measured_Iq;
-		float error_Id = requested_Id - measured_Id;
+// 		float error_Iq = requested_Iq - measured_Iq;
+// 		float error_Id = requested_Id - measured_Id;
 
-		float requested_Vq = Current_Controller(error_Iq);
-		float requested_Vd = Current_Controller(error_Id);
+// 		float requested_Vq = Current_Controller(error_Iq);
+// 		float requested_Vd = Current_Controller(error_Id);
 
-		float requested_duty_cycle_Q = requested_Vq / (0.5*VBUS);
-		float requested_duty_cycle_D = requested_Vd / (0.5*VBUS);
+// 		float requested_duty_cycle_Q = requested_Vq / (0.5*VBUS);
+// 		float requested_duty_cycle_D = requested_Vd / (0.5*VBUS);
 
-		float requested_duty_cycle_U;
-		float requested_duty_cycle_V;
-		float requested_duty_cycle_W;
+// 		float requested_duty_cycle_U;
+// 		float requested_duty_cycle_V;
+// 		float requested_duty_cycle_W;
 
-		Inverse_Carke_and_Park_Transform(theta, requested_duty_cycle_D, requested_duty_cycle_Q, &requested_duty_cycle_U, &requested_duty_cycle_V, &requested_duty_cycle_W);
+// 		Inverse_Carke_and_Park_Transform(theta, requested_duty_cycle_D, requested_duty_cycle_Q, &requested_duty_cycle_U, &requested_duty_cycle_V, &requested_duty_cycle_W);
 
-		if (requested_duty_cycle_U > (float)0.95){
-			requested_duty_cycle_U = 0.95;
-		}
-		if (requested_duty_cycle_U < (float)-0.95){
-			requested_duty_cycle_U = -0.95;
-		}
+// 		if (requested_duty_cycle_U > (float)0.95){
+// 			requested_duty_cycle_U = 0.95;
+// 		}
+// 		if (requested_duty_cycle_U < (float)-0.95){
+// 			requested_duty_cycle_U = -0.95;
+// 		}
 
-		if (requested_duty_cycle_V > (float)0.95){
-			requested_duty_cycle_V = 0.95;
-		}
-		if (requested_duty_cycle_V < (float)-0.95){
-			requested_duty_cycle_V = -0.95;
-		}
+// 		if (requested_duty_cycle_V > (float)0.95){
+// 			requested_duty_cycle_V = 0.95;
+// 		}
+// 		if (requested_duty_cycle_V < (float)-0.95){
+// 			requested_duty_cycle_V = -0.95;
+// 		}
 
-		if (requested_duty_cycle_W > (float)0.95){
-			requested_duty_cycle_W = 0.95;
-		}
-		if (requested_duty_cycle_W < (float)-0.95){
-			requested_duty_cycle_W = -0.95;
-		}
+// 		if (requested_duty_cycle_W > (float)0.95){
+// 			requested_duty_cycle_W = 0.95;
+// 		}
+// 		if (requested_duty_cycle_W < (float)-0.95){
+// 			requested_duty_cycle_W = -0.95;
+// 		}
 
-		requested_duty_cycle_U = (requested_duty_cycle_U + 1)/2;
-		requested_duty_cycle_V = (requested_duty_cycle_V + 1)/2;
-		requested_duty_cycle_W = (requested_duty_cycle_W + 1)/2;
+// 		requested_duty_cycle_U = (requested_duty_cycle_U + 1)/2;
+// 		requested_duty_cycle_V = (requested_duty_cycle_V + 1)/2;
+// 		requested_duty_cycle_W = (requested_duty_cycle_W + 1)/2;
 
-		CAPTURE_COMP_U = requested_duty_cycle_U * 500*SYSCLK/PWMCLK;
-		CAPTURE_COMP_V = requested_duty_cycle_V * 500*SYSCLK/PWMCLK;
-		CAPTURE_COMP_W = requested_duty_cycle_W * 500*SYSCLK/PWMCLK;
-    }
-}
+// 		CAPTURE_COMP_U = requested_duty_cycle_U * 500*SYSCLK/PWMCLK;
+// 		CAPTURE_COMP_V = requested_duty_cycle_V * 500*SYSCLK/PWMCLK;
+// 		CAPTURE_COMP_W = requested_duty_cycle_W * 500*SYSCLK/PWMCLK;
+//     }
+// }
 
 
 void Parity_Error_Callback(void){
