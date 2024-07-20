@@ -119,6 +119,7 @@ void communication::set_tx_packet_length(uint32_t length){
 	if(stream_enabled){
 		DMA2_Stream6->CR |= DMA_SxCR_EN; // Enable DMA stream
 	}
+	expected_tx_length = length;
 }
 
 
@@ -139,6 +140,7 @@ void communication::set_rx_packet_length(uint32_t length){
 	if(stream_enabled){
 		DMA2_Stream1->CR |= DMA_SxCR_EN; // Enable DMA stream
 	}
+	expected_rx_length = length;
 }
 
 
@@ -187,7 +189,9 @@ void communication::usart6_interrupt_handler(){
 		start_receive();
 
 		if(interpret_rx_packet()){	// if this returns false, the rx data was either invalid or not addressed to this device
-			// TODO: start TX transmission upon valid packet receive
+			// start TX transmission upon valid packet receive
+			generate_tx_packet();
+			start_transmir();
 		}
 		
     }
@@ -203,13 +207,129 @@ uint32_t communication::calculate_crc(uint32_t *data, uint8_t data_length){
 }
 
 bool communication::interpret_rx_packet(){
-	if(calculate_crc(rx_data, expected_rx_length-1) == rx_data[expected_rx_length-1]){	// verify CRC is correct
-		if(rx_data[0] & 0xFF == device_address){	// verify device address matches
-
+	if(calculate_crc(rx.data_words, expected_rx_length-1) == rx.data_words[expected_rx_length-1]){	// verify CRC is correct
+		if(rx.data_bytes[0] == device_address){	// verify device address matches
+			//TODO: update registers
 			return true;
 		}
 	}
 	return false;
+}
+
+void pack_8_to_8_array(uint8_t data_in, uint16_t &offset, uint8_t *array){
+	array[offset] = data_in;
+	offset++;
+}
+void pack_8_to_8_array(int8_t data_in, uint16_t &offset, uint8_t *array){
+	array[offset] = reinterpret_cast<uint8_t&>(data_in);
+	offset++;
+}
+void pack_16_to_8_array(uint16_t data_in, uint16_t &offset, uint8_t *array){
+	array[offset] = data_in & 0xFF;
+	array[offset+1] = (data_in >> 8) & 0xFF;
+	offset += 2;
+}
+void pack_16_to_8_array(int16_t data_in, uint16_t &offset, uint8_t *array){
+	uint16_t u_data_in = reinterpret_cast<uint16_t&>(data_in);
+	array[offset] = u_data_in & 0xFF;
+	array[offset+1] = (u_data_in >> 8) & 0xFF;
+	offset += 2;
+}
+void pack_32_to_8_array(uint32_t data_in, uint16_t &offset, uint8_t *array){
+	array[offset] = data_in & 0xFF;
+	array[offset+1] = (data_in >> 8) & 0xFF;
+	array[offset+2] = (data_in >> 16) & 0xFF;
+	array[offset+3] = (data_in >> 24) & 0xFF;
+	offset += 4;
+}
+void pack_32_to_8_array(int32_t data_in, uint16_t &offset, uint8_t *array){
+	uint32_t u_data_in = reinterpret_cast<uint32_t&>(data_in);
+	array[offset] = u_data_in & 0xFF;
+	array[offset+1] = (u_data_in >> 8) & 0xFF;
+	array[offset+2] = (u_data_in >> 16) & 0xFF;
+	array[offset+3] = (u_data_in >> 24) & 0xFF;
+	offset += 4;
+}
+void pack_float_to_8_array(float data_in, uint16_t &offset, uint8_t *array){
+	uint32_t u_data_in = reinterpret_cast<uint32_t&>(data_in);
+	array[offset] = u_data_in & 0xFF;
+	array[offset+1] = (u_data_in >> 8) & 0xFF;
+	array[offset+2] = (u_data_in >> 16) & 0xFF;
+	array[offset+3] = (u_data_in >> 24) & 0xFF;
+	offset += 4;
+}
+
+uint8_t get_register_size(uint16_t address){
+
+}
+
+void communication::generate_tx_packet(){
+	
+	if(device_get_register(enable_cyclic_data) != 0 && !cyclic_mode_enabled){
+		
+		// setup cyclic mode
+		cyclic_read_count = 0;
+		cyclic_write_count = 0;
+
+		for(uint8_t i=0; i<CYCLIC_ADDRESS_COUNT; i++){
+			uint16_t read_address = device_get_register(cyclic_read_address_0+i);
+			uint16_t write_address = device_get_register(cyclic_write_address_0+i);
+			if(read_address != 0xFFFF){
+				cyclic_read_addresses[cyclic_read_count] = read_address;
+				cyclic_read_sizes[cyclic_read_count] = get_register_size(read_address);
+				cyclic_read_count++;
+			}
+			if(write_address != 0xFFFF){
+				cyclic_write_addresses[i] = write_address;
+				cyclic_write_sizes[cyclic_write_count] = get_register_size(write_address);
+				cyclic_write_count++;
+			}
+		}
+		cyclic_mode_enabled = true;
+	}
+
+	packing_offset = 0
+	// device address
+	pack_8_to_8_array(device_address, packing_offset, tx.data_bytes);
+
+	// sequential data control/address and response
+	pack_32_to_8_array(sequential_register_address, packing_offset, tx.data_bytes);
+	pack_32_to_8_array(sequential_register_data_response, packing_offset, tx.data_bytes);
+
+	// add cyclic data read packets
+	if(cyclic_mode_enabled){
+		for(int i=0; i<cyclic_read_count; i++){
+			uint32_t raw_value;
+			controller_get_register(cyclic_read_addresses[i], raw_value);
+			switch (cyclic_read_sizes[i]){
+				case 1:
+					pack_8_to_8_array(reinterpret_cast<uint8_t&>(raw_value), packing_offset, tx.data_bytes);
+					break;
+
+				case 2:
+					pack_16_to_8_array(reinterpret_cast<uint16_t&>(raw_value), packing_offset, tx.data_bytes);
+					break;
+
+				case 4:
+					pack_32_to_8_array(raw_value, packing_offset, tx.data_bytes);
+					break;
+			
+				default:
+					break;
+			}
+		}
+	}
+
+	uint16_t temp = packing_offset;
+	for(int i=0; i<(temp % 4); i++){	// pack additional bytes to ensure packet is a multiple of 32bits
+		pack_8_to_8_array(0, packing_offset, tx.data_bytes);
+	}
+
+	pack_32_to_8_array(calculate_crc(tx.data_words, packing_offset/4), packing_offset, tx.data_bytes);
+
+	if(expected_tx_length != packing_offset/4){
+		set_tx_packet_length(packing_offset/4);
+	}
 }
 
 /*!

@@ -127,6 +127,17 @@ for param in deviceDescriptor["hard_parameters"].items():
 fileGen.blankLine(2)
 
 
+# generate cyclic register access registers
+cyclic_count = deviceDescriptor["hard_parameters"]["cyclic_address_count"]["value"]
+cyclic_read_info = deviceDescriptor["registers"].pop("cyclic_read_address_n")
+cyclic_write_info = deviceDescriptor["registers"].pop("cyclic_write_address_n")
+for index in range(cyclic_count):
+    deviceDescriptor["registers"][f"cyclic_read_address_{index}"] = cyclic_read_info
+for index in range(cyclic_count):
+    deviceDescriptor["registers"][f"cyclic_write_address_{index}"] = cyclic_write_info
+
+
+
 # group registers into their respective data types
 registers = {
     "int8_t":{"read/write":[], "read":[], "write":[]},

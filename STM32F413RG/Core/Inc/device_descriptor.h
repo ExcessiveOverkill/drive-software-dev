@@ -4,7 +4,7 @@
 // do not manually modify this file, modify "device_descriptor.yaml" instead
 // run autogen.py to update (called at each build by default)
 
-// last updated at 2024-07-19 19:31:34.135087
+// last updated at 2024-07-20 13:13:19.843751
 
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __DEVICE_DESCRIPTOR_H
@@ -34,6 +34,7 @@
 #define DFSDM_SHORT_CIRCUIT_BIT_COUNT 127		// (count) Number of consecutive same bits to receive from the ADC before triggering short circuit detection. Max is 127 (ADCs send a different bit every 128 cycles even at full scale)
 #define MAX_PACKET_SIZE 36		// (32bit words) Maximum expected communication packet size
 #define DEVICE_STARTING_ADDRESS 127		// (address) rs422 to address to start at, DIP switches may be used to increment it
+#define CYCLIC_ADDRESS_COUNT 32		// (count) Maximum number of cyclic addresses that can be configured
 
 
 #define INT8_T_REGISTER_COUNT 0
