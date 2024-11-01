@@ -540,6 +540,10 @@ int main(void){
 	uint64_t last_current_test_time = sysTick_counter;
 
 	while(1){
+		comm.debug();
+	}
+
+	while(0){
 
 		if(current_state == FAULT && sysTick_counter>last_idle_attempt_time+(SYSTICK_FREQUENCY*1)){
 			requested_state = IDLE;
@@ -555,16 +559,16 @@ int main(void){
 		
 
 
-		volatile uint32_t temp = comm.get_commutaion_angle();
-		theta = ((float)temp)/0xFFFF * (2*pi);
-		theta += pi/2;	// offset to match test fanuc encoder phase angle
+		//volatile uint32_t temp = comm.get_commutaion_angle();
+		//theta = ((float)temp)/0xFFFF * (2*pi);
+		//theta += pi/2;	// offset to match test fanuc encoder phase angle
 
-		if(temp > 0x8000){
-			userIO.set_led_state(0b1000, userIO.on);
-		}
-		else{
-			userIO.set_led_state(0b1000, userIO.off);
-		}
+		// if(temp > 0x8000){
+		// 	userIO.set_led_state(0b1000, userIO.on);
+		// }
+		// else{
+		// 	userIO.set_led_state(0b1000, userIO.off);
+		// }
 
 		switch(current_state){
 			case STARTUP:
@@ -704,7 +708,7 @@ int main(void){
 				// 	}
 				// }
 
-				requested_Iq = -((float)comm.get_current_command_milliamps()) / 500.0;
+				//requested_Iq = -((float)comm.get_current_command_milliamps()) / 500.0;
 
 				if(requested_Iq > 8.0)requested_Iq = 8.0;
 				if(requested_Iq < -8.0)requested_Iq = -8.0;

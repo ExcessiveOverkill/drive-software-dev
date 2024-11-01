@@ -1,4 +1,4 @@
-import yaml, datetime, types, os
+import yaml, datetime, os
 
 class cFileGenerator:
 
@@ -18,9 +18,7 @@ class cFileGenerator:
 
 // last updated at {datetime.datetime.now()}
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __{self.fileName.upper().split(".")[0]}_{self.fileName.upper().split(".")[1]}
-#define __{self.fileName.upper().split(".")[0]}_{self.fileName.upper().split(".")[1]}
+#pragma once
 
 """
 
@@ -92,7 +90,6 @@ class cFileGenerator:
         self.file += f"\n#endif"
 
     def saveFile(self) -> None:
-        self.file += "\n\n#endif"
         f = open(self.fullFilePath, "w")
         f.write(self.file)
         f.close()
@@ -102,15 +99,17 @@ class cFileGenerator:
 currentDir = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
 # load descriptor file
 try:
-    deviceDescriptor = yaml.safe_load(open(currentDir + "/device_descriptor.yaml"))
+    deviceDescriptor = yaml.safe_load(open(currentDir + "/../device_descriptor.yaml"))
 except yaml.parser.ParserError as e:
     print(f"AUTOGEN: Error while parsing device_descriptor file: {e}")
+    raise e
 except FileNotFoundError:
     print("AUTOGEN: device_descriptor.yaml not found")
+    raise FileNotFoundError
 
 
 # generate header file for device firmware
-fileGen = cFileGenerator(currentDir + "/Core/Inc/device_descriptor.h")
+fileGen = cFileGenerator(currentDir + "/../firmware/Core/Inc/device_descriptor.h")
 
 fileGen.define("HARDWARE_TYPE", deviceDescriptor["hardware"]["type"])
 fileGen.define("HARDWARE_VERSION", deviceDescriptor["hardware"]["version"])
@@ -207,11 +206,11 @@ for type_name, vars in registers.items():
         singleLineDescription = register[1]["description"].replace('\n', ' ')
         if(register[1]['unit'] != ""):
             enum_data[str(offset)] = {
-                "name":register[0],
+                "name":f"{register[0]}_register",
                 "comment":f"({register[1]['unit']}) {singleLineDescription}"}
         else:
             enum_data[str(offset)] = {
-                "name":register[0],
+                "name":f"{register[0]}_register",
                 "comment":f"{singleLineDescription}"}
         enum_data["end"] = offset
         offset += 1
@@ -226,9 +225,14 @@ for type_name, vars in registers.items():
     enum_data["end"] = offset
     for register_index, register in enumerate(vars["read"]):
         singleLineDescription = register[1]["description"].replace('\n', ' ')
-        enum_data[str(offset)] = {
-            "name":register[0],
-            "comment":f"({register[1]['unit']}) {singleLineDescription}"}
+        if(register[1]['unit'] != ""):
+            enum_data[str(offset)] = {
+                "name":f"{register[0]}_register",
+                "comment":f"({register[1]['unit']}) {singleLineDescription}"}
+        else:
+            enum_data[str(offset)] = {
+                "name":f"{register[0]}_register",
+                "comment":f"{singleLineDescription}"}
         enum_data["end"] = offset
         offset += 1
     if(offset == old_offset):
@@ -242,9 +246,14 @@ for type_name, vars in registers.items():
     enum_data["end"] = offset
     for register_index, register in enumerate(vars["write"]):
         singleLineDescription = register[1]["description"].replace('\n', ' ')
-        enum_data[str(offset)] = {
-            "name":register[0],
-            "comment":f"({register[1]['unit']}) {singleLineDescription}"}
+        if(register[1]['unit'] != ""):
+            enum_data[str(offset)] = {
+                "name":f"{register[0]}_register",
+                "comment":f"({register[1]['unit']}) {singleLineDescription}"}
+        else:
+            enum_data[str(offset)] = {
+                "name":f"{register[0]}_register",
+                "comment":f"{singleLineDescription}"}
         enum_data["end"] = offset
         offset += 1
     if(offset == old_offset):

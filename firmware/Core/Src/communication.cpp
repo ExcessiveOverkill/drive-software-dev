@@ -68,13 +68,13 @@ void communication::init(){
     DMA2_Stream1->PAR = (uint32_t)&USART6->DR;        // use USART6 data register (rx)
 	DMA2_Stream6->PAR = (uint32_t)&USART6->DR;        // use USART6 data register (tx)
 
-    DMA2_Stream1->M0AR = (uint32_t)&rx_data;   // use rx_data as the memory for RX data
-	DMA2_Stream6->M0AR = (uint32_t)&tx_data;   // use tx_data as the memory for TX data
+    DMA2_Stream1->M0AR = (uint32_t)&rx.data_words;   // use rx_data as the memory for RX data
+	DMA2_Stream6->M0AR = (uint32_t)&tx.data_words;   // use tx_data as the memory for TX data
 
 	DMA2_Stream6->CR |= DMA_SxCR_DIR_0;		// configure TX stream for memory-to-peripheral
 
-    set_rx_packet_length(MAX_PACKET_SIZE);
-	set_tx_packet_length(MAX_PACKET_SIZE);
+    set_rx_packet_length(4);	// default packet size
+	set_tx_packet_length(4);
 
     //DMA2_Stream1->CR |= 0b01 << DMA_SxCR_MBURST_Pos;    // use 4 beat bursts
 	//DMA2_Stream6->CR |= 0b01 << DMA_SxCR_MBURST_Pos;    // use 4 beat bursts
@@ -156,6 +156,14 @@ void communication::start_receive(){
 
 
 /*!
+    \brief Send data packet
+*/
+void communication::start_transmit(){
+	//USART6->CR3 |= USART_CR3_DMAT;	// Enable DMA for tx
+}
+
+
+/*!
     \brief RX line is in idle state
 */
 bool communication::rx_idle_detected(){
@@ -191,7 +199,7 @@ void communication::usart6_interrupt_handler(){
 		if(interpret_rx_packet()){	// if this returns false, the rx data was either invalid or not addressed to this device
 			// start TX transmission upon valid packet receive
 			generate_tx_packet();
-			start_transmir();
+			start_transmit();
 		}
 		
     }
@@ -216,33 +224,33 @@ bool communication::interpret_rx_packet(){
 	return false;
 }
 
-void pack_8_to_8_array(uint8_t data_in, uint16_t &offset, uint8_t *array){
+void communication::pack_8_to_8_array(uint8_t data_in, uint16_t &offset, uint8_t *array){
 	array[offset] = data_in;
 	offset++;
 }
-void pack_8_to_8_array(int8_t data_in, uint16_t &offset, uint8_t *array){
+void communication::pack_8_to_8_array(int8_t data_in, uint16_t &offset, uint8_t *array){
 	array[offset] = reinterpret_cast<uint8_t&>(data_in);
 	offset++;
 }
-void pack_16_to_8_array(uint16_t data_in, uint16_t &offset, uint8_t *array){
+void communication::pack_16_to_8_array(uint16_t data_in, uint16_t &offset, uint8_t *array){
 	array[offset] = data_in & 0xFF;
 	array[offset+1] = (data_in >> 8) & 0xFF;
 	offset += 2;
 }
-void pack_16_to_8_array(int16_t data_in, uint16_t &offset, uint8_t *array){
+void communication::pack_16_to_8_array(int16_t data_in, uint16_t &offset, uint8_t *array){
 	uint16_t u_data_in = reinterpret_cast<uint16_t&>(data_in);
 	array[offset] = u_data_in & 0xFF;
 	array[offset+1] = (u_data_in >> 8) & 0xFF;
 	offset += 2;
 }
-void pack_32_to_8_array(uint32_t data_in, uint16_t &offset, uint8_t *array){
+void communication::pack_32_to_8_array(uint32_t data_in, uint16_t &offset, uint8_t *array){
 	array[offset] = data_in & 0xFF;
 	array[offset+1] = (data_in >> 8) & 0xFF;
 	array[offset+2] = (data_in >> 16) & 0xFF;
 	array[offset+3] = (data_in >> 24) & 0xFF;
 	offset += 4;
 }
-void pack_32_to_8_array(int32_t data_in, uint16_t &offset, uint8_t *array){
+void communication::pack_32_to_8_array(int32_t data_in, uint16_t &offset, uint8_t *array){
 	uint32_t u_data_in = reinterpret_cast<uint32_t&>(data_in);
 	array[offset] = u_data_in & 0xFF;
 	array[offset+1] = (u_data_in >> 8) & 0xFF;
@@ -250,7 +258,7 @@ void pack_32_to_8_array(int32_t data_in, uint16_t &offset, uint8_t *array){
 	array[offset+3] = (u_data_in >> 24) & 0xFF;
 	offset += 4;
 }
-void pack_float_to_8_array(float data_in, uint16_t &offset, uint8_t *array){
+void communication::pack_float_to_8_array(float data_in, uint16_t &offset, uint8_t *array){
 	uint32_t u_data_in = reinterpret_cast<uint32_t&>(data_in);
 	array[offset] = u_data_in & 0xFF;
 	array[offset+1] = (u_data_in >> 8) & 0xFF;
@@ -259,21 +267,58 @@ void pack_float_to_8_array(float data_in, uint16_t &offset, uint8_t *array){
 	offset += 4;
 }
 
-uint8_t get_register_size(uint16_t address){
+uint8_t communication::get_register_size(uint16_t raw_address){
+	if(raw_address >= int8_t_register_rw_start && raw_address <= int8_t_register_w_end){
+		return 1;
+	}
 
+	else if(raw_address >= int16_t_register_rw_start && raw_address <= int16_t_register_w_end){
+		return 2;
+	}
+
+	else if(raw_address >= int32_t_register_rw_start && raw_address <= int32_t_register_w_end){
+		return 4;
+	}
+	
+	else if(raw_address >= uint8_t_register_rw_start && raw_address <= uint8_t_register_w_end){
+		return 1;
+	}
+
+	else if(raw_address >= uint16_t_register_rw_start && raw_address <= uint16_t_register_w_end){
+		return 2;
+	}
+	
+	else if(raw_address >= uint32_t_register_rw_start && raw_address <= uint32_t_register_w_end){
+		return 4;
+	}
+
+	else if(raw_address >= float_register_rw_start && raw_address <= float_register_w_end){
+		return 4;
+	}
+	
+	else{
+		return 0;
+	}
+}
+
+void communication::debug(){
+	//device_set_register(cyclic_read_address_0_register, static_cast<uint16_t>(current_measured_d_register));
+	//device_set_register(enable_cyclic_data_register, 1);
+	//device_set_register(current_measured_d_register, 1234);
+	generate_tx_packet();
 }
 
 void communication::generate_tx_packet(){
 	
-	if(device_get_register(enable_cyclic_data) != 0 && !cyclic_mode_enabled){
+	if(device_get_register(enable_cyclic_data_register) != 0 && !cyclic_mode_enabled){
 		
 		// setup cyclic mode
 		cyclic_read_count = 0;
 		cyclic_write_count = 0;
 
 		for(uint8_t i=0; i<CYCLIC_ADDRESS_COUNT; i++){
-			uint16_t read_address = device_get_register(cyclic_read_address_0+i);
-			uint16_t write_address = device_get_register(cyclic_write_address_0+i);
+			uint16_t read_address = device_get_register(static_cast<uint16_t_register_rw>(cyclic_read_address_0_register+i));
+			uint16_t write_address = device_get_register(static_cast<uint16_t_register_rw>(cyclic_write_address_0_register+i));
 			if(read_address != 0xFFFF){
 				cyclic_read_addresses[cyclic_read_count] = read_address;
 				cyclic_read_sizes[cyclic_read_count] = get_register_size(read_address);
@@ -288,7 +333,7 @@ void communication::generate_tx_packet(){
 		cyclic_mode_enabled = true;
 	}
 
-	packing_offset = 0
+	packing_offset = 0;
 	// device address
 	pack_8_to_8_array(device_address, packing_offset, tx.data_bytes);
 
@@ -300,29 +345,49 @@ void communication::generate_tx_packet(){
 	if(cyclic_mode_enabled){
 		for(int i=0; i<cyclic_read_count; i++){
 			uint32_t raw_value;
-			controller_get_register(cyclic_read_addresses[i], raw_value);
-			switch (cyclic_read_sizes[i]){
-				case 1:
-					pack_8_to_8_array(reinterpret_cast<uint8_t&>(raw_value), packing_offset, tx.data_bytes);
-					break;
+			if(controller_get_register(cyclic_read_addresses[i], raw_value) == SUCCESS){
+				switch (cyclic_read_sizes[i]){
+					case 1:
+						pack_8_to_8_array(reinterpret_cast<uint8_t&>(raw_value), packing_offset, tx.data_bytes);
+						break;
 
-				case 2:
-					pack_16_to_8_array(reinterpret_cast<uint16_t&>(raw_value), packing_offset, tx.data_bytes);
-					break;
+					case 2:
+						pack_16_to_8_array(reinterpret_cast<uint16_t&>(raw_value), packing_offset, tx.data_bytes);
+						break;
 
-				case 4:
-					pack_32_to_8_array(raw_value, packing_offset, tx.data_bytes);
-					break;
-			
-				default:
-					break;
+					case 4:
+						pack_32_to_8_array(raw_value, packing_offset, tx.data_bytes);
+						break;
+				
+					default:
+						break;
+				}
+			}
+			else{
+				// we must still fill packet space even though the register address was invalid
+				error_reading_cyclic_address = true;
+				switch (cyclic_read_sizes[i]){
+					case 1:
+						pack_8_to_8_array(static_cast<uint8_t>(0), packing_offset, tx.data_bytes);
+						break;
+
+					case 2:
+						pack_16_to_8_array(static_cast<uint16_t>(0), packing_offset, tx.data_bytes);
+						break;
+
+					case 4:
+						pack_32_to_8_array(static_cast<uint32_t>(0), packing_offset, tx.data_bytes);
+						break;
+				
+					default:
+						break;
+				}
 			}
 		}
 	}
 
-	uint16_t temp = packing_offset;
-	for(int i=0; i<(temp % 4); i++){	// pack additional bytes to ensure packet is a multiple of 32bits
-		pack_8_to_8_array(0, packing_offset, tx.data_bytes);
+	while(packing_offset % 4 != 0){	// pack additional blank bytes to ensure packet is a multiple of 32bits
+		pack_8_to_8_array(static_cast<uint8_t>(0), packing_offset, tx.data_bytes);
 	}
 
 	pack_32_to_8_array(calculate_crc(tx.data_words, packing_offset/4), packing_offset, tx.data_bytes);
@@ -351,25 +416,6 @@ void communication::restart_rx_dma(){
 void communication::clear_rx_idle_flag(){
 	volatile uint32_t temp = USART6->SR;	// read SR register
 	temp = USART6->DR;	// read DR register
-}
-
-
-/*!
-    \brief Get commutation angle sent from controller
-*/
-uint32_t communication::get_commutaion_angle(){
-	return (rx_data[0] >> 0) & 0xFFFF;
-}
-
-
-/*!
-    \brief Get current command sent from controller
-*/
-int16_t communication::get_current_command_milliamps(){
-	uint16_t temp = rx_data[0] >> 16;
-	int16_t current = 0;
-	memcpy(&current, &temp, 2);
-	return current;
 }
 
 

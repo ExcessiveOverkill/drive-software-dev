@@ -1,0 +1,13 @@
+{
+    "recommendations": [
+      "ms-vscode.cpptools",
+      "ms-vscode.cmake-tools",
+      "twxs.cmake",
+      "marus25.cortex-debug",
+      "dan-c-underwood.arm",
+      "zixuanwang.linkerscript",
+      "ms-python.python",
+      "ms-python.vscode-pylance",
+      "ms-python.vscode-python-debugger",
+    ]
+  }

@@ -1,7 +1,7 @@
 
 hardware:
-  type: 0
-  version: 0
+  type: 0 #32 bit
+  version: 0  #32 bit
   readable_name: "Servo drive (model number goes here)"
   description: "Servo drive designed for industrial high voltage motors"
 
@@ -12,6 +12,7 @@ firmware:
   
 hard_parameters: 
   
+  # TODO reword
   # DO NOT MODIFY THESE VALUES UNLESS YOU KNOW WHAT YOU ARE DOING
   # incorrect values may result in catastrophic hardware failure
   # these are set at build time and cannot be modified by the controller
@@ -182,7 +183,7 @@ registers:
   commutation_command:
     value: 0
     var_type: "uint16_t"
-    unit: ""
+    unit: "counts"
     readable_name: "Electrical commutation command"
     description: "Value 0-65525 representing the current electrical angle of the motor"
     permissions: "read/write"
@@ -236,7 +237,7 @@ registers:
     permissions: "read/write"
 
 
-  ####################### SYSTEM REGISTERS (DO NOT MODIFY) #######################
+  ####################### COMMUNICATION REGISTERS #######################
 
   device_communication_watchdog_timeout:
     value: 1

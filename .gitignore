@@ -1,6 +1,5 @@
 
-STM32F413RG/build
-.metadatas
-
+firmware/build
+python/.venv
 /.metadata
 

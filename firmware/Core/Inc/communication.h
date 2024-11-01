@@ -65,6 +65,7 @@ class communication{
         void pack_32_to_8_array(int32_t data_in, uint16_t &offset, uint8_t *array);
         void pack_float_to_8_array(float data_in, uint16_t &offset, uint8_t *array);
 
+        uint8_t get_register_size(uint16_t raw_address);
         uint32_t calculate_crc(uint32_t *data, uint8_t data_length);
         bool interpret_rx_packet();
         void generate_tx_packet();
@@ -74,10 +75,11 @@ class communication{
           FAIL  // invalid address or permissions
         };
 
+        //errors
+        bool error_reading_cyclic_address = false;
+
         controller_register_access_result controller_get_register(uint16_t raw_address, uint32_t &raw_value);
         controller_register_access_result controller_set_register(uint16_t raw_address, uint32_t &raw_value);
-
-        uint16_t commutation_angle = 0;
 
     public:
 
@@ -87,9 +89,6 @@ class communication{
         communication(uint32_t i);
         
         void init(void);
-
-        uint32_t get_commutaion_angle();
-        int16_t get_current_command_milliamps();
 
         void start_receive(void);
         bool rx_idle_detected(void);
@@ -152,6 +151,8 @@ class communication{
         void device_set_register(float_register_rw address, float value);
         void device_set_register(float_register_r address, float value);
         void device_set_register(float_register_w address, float value);
+
+        void debug();
 
         //uint32_t get_errors(void);
 
