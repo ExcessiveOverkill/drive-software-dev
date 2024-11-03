@@ -4,3 +4,4 @@ python/.venv
 /.metadata
 
 firmware/Core/Inc/device_descriptor.h
+firmware/Core/Inc/device_descriptor.h
