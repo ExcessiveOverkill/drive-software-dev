@@ -1,7 +1,6 @@
 
 firmware/build
 python/.venv
-/.metadata
 
 
 firmware/Core/Inc/device_descriptor.h
