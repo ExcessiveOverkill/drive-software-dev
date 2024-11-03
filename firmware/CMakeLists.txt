@@ -99,10 +99,18 @@ target_link_options(${EXECUTABLE} PRIVATE
     -Wl,--print-memory-usage
 )
 
-add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+# Generate device_descriptor.h using Python script
+add_custom_command(
+    OUTPUT ${PROJ_PATH}/Core/Inc/device_descriptor.h
     COMMAND .venv/Scripts/python autoGen.py
     WORKING_DIRECTORY ${PROJ_PATH}/../python
 )
+
+# Custom target to generate device_descriptor.h
+add_custom_target(generate_device_descriptor_h DEPENDS ${PROJ_PATH}/Core/Inc/device_descriptor.h)
+
+# Make the main target depend on the custom target
+add_dependencies(${PROJECT_NAME} generate_device_descriptor_h)
 
 # Execute post-build to print size
 add_custom_command(TARGET ${EXECUTABLE} POST_BUILD
