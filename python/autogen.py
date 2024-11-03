@@ -99,7 +99,7 @@ class cFileGenerator:
 currentDir = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
 # load descriptor file
 try:
-    deviceDescriptor = yaml.safe_load(open(currentDir + "/../device_descriptor.yaml"))
+    deviceDescriptor = yaml.safe_load(open(currentDir + "/device_descriptor.yaml"))
 except yaml.parser.ParserError as e:
     print(f"AUTOGEN: Error while parsing device_descriptor file: {e}")
     raise e

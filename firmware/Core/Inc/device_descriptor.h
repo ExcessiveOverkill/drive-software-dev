@@ -4,7 +4,7 @@
 // do not manually modify this file, modify "device_descriptor.yaml" instead
 // run autogen.py to update (called at each build by default)
 
-// last updated at 2024-11-03 12:05:29.568997
+// last updated at 2024-11-03 13:37:38.119317
 
 #pragma once
 
