@@ -31,10 +31,14 @@ Follow these steps to set up the development environment:
 <br>
 
 # Building and Debugging
-## Building only
-1. Hit (Ctrl+Shift+B) to build
+## Set Build Config
+1. Open the Cmake tab on the left side panel and select a build preset<br>
+![Select preset](.readme/cmake_config.png)
 ## Building + Run/Debug
 1. Click the "Run and Debug" tab on the left sidepanel or hit (Ctrl+Shift+D) to open the debug panel.
 2. Select a "RUN AND DEBUG" configuration at the top.
 3. Hit the play button or (F5) to run/debug.
+## Building only
+1. Hit (Ctrl+Shift+B) to build
+
 
