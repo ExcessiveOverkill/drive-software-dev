@@ -6,9 +6,7 @@
   ******************************************************************************
 **/
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __COMMUNICATION_H
-#define __COMMUNICATION_H
+#pragma once
 
 #include "stm32f413xx.h"
 #include <assert.h>
@@ -157,5 +155,3 @@ class communication{
         //uint32_t get_errors(void);
 
 };
-
-#endif

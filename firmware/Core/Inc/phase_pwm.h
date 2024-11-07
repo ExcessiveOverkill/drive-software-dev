@@ -6,9 +6,7 @@
   ******************************************************************************
 **/
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __PHASE_PWM_H
-#define __PHASE_PWM_H
+#pragma once
 
 #include "stm32f413xx.h"
 #include <assert.h>
@@ -40,5 +38,3 @@ class phase_pwm{
         //uint32_t get_errors(void);
 
 };
-
-#endif
