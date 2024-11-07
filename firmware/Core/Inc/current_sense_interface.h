@@ -6,9 +6,7 @@
   ******************************************************************************
 **/
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __CURRENT_SENSE_INTERFACE_H
-#define __CURRENT_SENSE_INTERFACE_H
+#pragma once
 
 #include "stm32f413xx.h"
 #include <assert.h>
@@ -51,5 +49,3 @@ class current_sense_interface{
         //uint32_t get_errors(void);
 
 };
-
-#endif

@@ -6,9 +6,7 @@
   ******************************************************************************
 **/
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __STO_H
-#define __STO_H
+#pramga once
 
 #include "stm32f413xx.h"
 #include <assert.h>
@@ -36,5 +34,3 @@ class sto{
         //uint32_t get_errors(void);
 
 };
-
-#endif

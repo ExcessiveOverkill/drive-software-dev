@@ -6,17 +6,15 @@
   ******************************************************************************
 **/
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __ADC_INTERFACE_H
-#define __ADC_INTERFACE_H
+#pragma once
 
 #include "stm32f413xx.h"
 #include <assert.h>
 
 // sense voltage dividers, integer values only
-#define PHASE_SENSE_DIVIDER 1000000/5000    // 1M / 1k ohm
-#define PFC_SENSE_DIVIDER 1000000/5000    // 1M / 1k ohm
-#define DC_BUS_SENSE_DIVIDER 1000000/5000    // 1M / 1k ohm
+#define PHASE_SENSE_DIVIDER 1000000/5000
+#define PFC_SENSE_DIVIDER 1000000/5000
+#define DC_BUS_SENSE_DIVIDER 1000000/5000
 
 
 // Class for managing ADC hardware
@@ -34,10 +32,10 @@ class adc_interface{
 
         uint32_t dc_bus_millivolts = 0;
 
-        int32_t board_temp = 0;    // temp is in 0.001 deg C
-        int32_t mcu_temp = 0;      // temp is in 0.001 deg C
-        int32_t heatsink_1_temp = 0;   // temp is in 0.001 deg C
-        int32_t heatsink_2_temp = 0;   // temp is in 0.001 deg C
+        int32_t board_temp = 0;       // temp is in 0.001 deg C
+        int32_t mcu_temp = 0;         // temp is in 0.001 deg C
+        int32_t heatsink_1_temp = 0;  // temp is in 0.001 deg C
+        int32_t heatsink_2_temp = 0;  // temp is in 0.001 deg C
 
         uint32_t gate_supply_millivolts = 0;    // not implemented in hardware
 
@@ -74,5 +72,3 @@ class adc_interface{
         uint32_t get_errors(void);
 
 };
-
-#endif
