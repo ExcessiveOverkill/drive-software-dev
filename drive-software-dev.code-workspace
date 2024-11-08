@@ -12,17 +12,13 @@
 		  "ms-python.vscode-python-debugger",
 		]
 	},
+
 	"folders": [
 		{
-			"path": "./"
+			"path": "."
 		}
 	],
-	"settings": {
-		"cmake.sourceDirectory": "${workspaceFolder}/firmware",
-		"files.associations": {
-			"cmath": "c",
-		}
-	},
+
 	"tasks": {
 		"version": "2.0.0",
 		"tasks": [

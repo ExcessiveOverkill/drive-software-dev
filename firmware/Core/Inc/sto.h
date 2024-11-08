@@ -6,7 +6,7 @@
   ******************************************************************************
 **/
 
-#pramga once
+#pragma once
 
 #include "stm32f413xx.h"
 #include <assert.h>
@@ -21,11 +21,11 @@ class sto{
 
         sto(uint32_t i);
         
-        void init(void);
+        error_severity init(void);
 
-        void enable(void);
+        error_severity enable(void);
 
-        void disable(void);
+        error_severity disable(void);
 
         bool output_allowed(void);
 
