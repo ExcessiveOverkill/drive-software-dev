@@ -17,6 +17,14 @@ hard_parameters:
   # incorrect values may result in catastrophic hardware failure
   # these are set at build time and cannot be modified by the controller
 
+  max_fan_speed_rpm:
+    value: 12400
+    var_type: "uint32_t"
+    unit: "rpm"
+    readable_name: "Max fan speed"
+    description: "Maximum fan speed in RPM"
+
+
   shunt_resistance:
     value: 0.005
     var_type: "float"

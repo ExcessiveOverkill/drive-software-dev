@@ -10,8 +10,8 @@
 
 #include "stm32f413xx.h"
 #include <assert.h>
-#include "main.h"
 #include "device_descriptor.h"
+
 #define PWM_ticks 1000*SYSCLK/PWMCLK/2
 
 // Class for managing phase outpuit PWM hardware
