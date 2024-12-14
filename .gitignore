@@ -2,3 +2,4 @@
 firmware/build
 python/.venv
 firmware/Core/Inc/device_descriptor.h
+/.vscode
