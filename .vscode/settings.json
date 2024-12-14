@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "C:/Users/jarre/OneDrive/Desktop/Projects/drive-software-dev/firmware"
+    "cmake.sourceDirectory": "C:/Users/jarre/OneDrive/Desktop/Projects/OSRC/drive-software-dev/firmware",
+    "C_Cpp.default.compilerPath": "C:\\msys64\\ucrt64\\bin\\gcc.exe"
 }
