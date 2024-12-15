@@ -435,12 +435,13 @@ void TIM2_init(){
 
 
 int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q){
-    
+    // Amplitude invarient
+
     // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
     // assert(fabs(A + B + C) < 0.1);    // Assert ABC currents agree
     
-    float X = (2 * A - B - C) * (1 / sqrt(6));
-    float Y = (B - C) * (1 / sqrt(2));
+    float X = (2 * A - B - C) * (1 / 3);
+    float Y = (B - C) * (sqrt(3) / 3);
     
     float co = cos(theta);
     float si = sin(theta);
@@ -453,7 +454,8 @@ int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, 
 
 
 int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C){
-    
+    // Amplitude invarient
+	
     // Inputs
     // theta = electrical angle [0, 2*pi] radians
     // D     = direct current [] amps
@@ -470,10 +472,10 @@ int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, fl
     float X = co*D - si*Q;
     float Y = si*D + co*Q;
     
-    *A = (sqrt(2.0 / 3.0)) * X;
-    *B = -(1 / sqrt(6.0)) * X;
-    *C = *B - (1.0 / sqrt(2.0)) * Y;
-    *B += (1.0 / sqrt(2.0)) * Y;
+    *A = X;
+    *B = -(1.0 / 2.0) * X;
+    *C = *B - (sqrt(3.0) / 2.0) * Y;
+    *B += (sqrt(3.0) / 2.0) * Y;
     
     // assert(fabs(*A + *B + *C) < 0.001);    // Assert ABC currents agree
     

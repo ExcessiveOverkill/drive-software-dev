@@ -1,6 +1,5 @@
-
-
-
+/* interrupt_catch.cpp */
+/* Catch all interrupts that are not allocated to save the state*/
 
 // // 
 // void _estack(void){
@@ -57,15 +56,9 @@
 //     while(1);
 // }   
 
-// Window WatchDog
-void WWDG_IRQHandler(void){
-    while(1);
-}
 
-// PVD through EXTI Line detection
-void PVD_IRQHandler(void){
-    while(1);
-}
+void WWDG_IRQHandler(void){while(1);}   // Window WatchDog
+void PVD_IRQHandler(void){while(1);}    // PVD through EXTI Line detection
 
 // Tamper and TimeStamps through the EXTI line
 void TAMP_STAMP_IRQHandler(void){
