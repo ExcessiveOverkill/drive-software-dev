@@ -3,13 +3,7 @@
 #define pi 3.141592653589793
 
 #include "stm32f413xx.h"
-#include "user_io.h"
-#include "fans.h"
-#include "adc_interface.h"
-#include "current_sense_interface.h"
-#include "sto.h"
-#include "phase_pwm.h"
-#include "communication.h"
+#include "device.h"
 
 
 

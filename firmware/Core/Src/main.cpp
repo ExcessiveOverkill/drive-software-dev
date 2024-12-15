@@ -1,61 +1,67 @@
 #include "main.h"
 
-
-
 int main(void){
 
-	enum States current_state = STARTUP;
-	enum States requested_state = IDLE;
+	device Device;
+	Device.run();
 
-	enum Enter_run_steps enter_run_step = ENABLE_PWM;
-	enum Enter_idle_steps enter_idle_step = CHECK_OK_TO_START;
-	enum Enter_fault_steps enter_fault_step = DISABLE_PWM;
+	return 1;	// should never reach this
+}
 
-	CPU_init();
-	TIM2_init();
+// int main(void){
 
-	SysTick->LOAD = (SYSCLK*1000000/8) / SYSTICK_FREQUENCY;
+// 	enum States current_state = STARTUP;
+// 	enum States requested_state = IDLE;
+
+// 	enum Enter_run_steps enter_run_step = ENABLE_PWM;
+// 	enum Enter_idle_steps enter_idle_step = CHECK_OK_TO_START;
+// 	enum Enter_fault_steps enter_fault_step = DISABLE_PWM;
+
+// 	CPU_init();
+// 	TIM2_init();
+
+// 	SysTick->LOAD = (SYSCLK*1000000/8) / SYSTICK_FREQUENCY;
 	
-	NVIC_EnableIRQ(SysTick_IRQn);
+// 	NVIC_EnableIRQ(SysTick_IRQn);
 
-	SysTick->CTRL = 0b11;	// enable counter and exception
+// 	SysTick->CTRL = 0b11;	// enable counter and exception
 
-	userIO.init();
-	//adc.init();
-	//currentSense.init();
-	//phasePWM.init();
-	//STO.init();
-	//comm.init();
+// 	userIO.init();
+// 	//adc.init();
+// 	//currentSense.init();
+// 	//phasePWM.init();
+// 	//STO.init();
+// 	//comm.init();
 
-	// test LEDs
-	userIO.set_led_state(0b1111, userIO.on);
-	delay_us(1000*1000);
-	userIO.set_led_state(0b1110, userIO.off);
-
-
-	current_state = FAULT;
-
-	requested_state = IDLE;
-
-	uint64_t last_idle_attempt_time = sysTick_counter;
-
-	uint64_t last_run_attempt_time = sysTick_counter;
-
-	uint64_t last_current_test_time = sysTick_counter;
-
-	Fans.set_speed(6200);
+// 	// test LEDs
+// 	userIO.set_led_state(0b1111, userIO.on);
+// 	delay_us(1000*1000);
+// 	userIO.set_led_state(0b1110, userIO.off);
 
 
-	volatile uint32_t speed1;
-	volatile uint32_t speed2;
+// 	current_state = FAULT;
 
-	while(1){
-		comm.debug();
+// 	requested_state = IDLE;
 
-		for(int i = 0; i < 12400000; i++){
-			Fans.set_speed(i/1000);	
-		}
-	}
+// 	uint64_t last_idle_attempt_time = sysTick_counter;
+
+// 	uint64_t last_run_attempt_time = sysTick_counter;
+
+// 	uint64_t last_current_test_time = sysTick_counter;
+
+// 	Fans.set_speed(6200);
+
+
+// 	volatile uint32_t speed1;
+// 	volatile uint32_t speed2;
+
+// 	while(1){
+// 		comm.debug();
+
+// 		for(int i = 0; i < 12400000; i++){
+// 			Fans.set_speed(i/1000);	
+// 		}
+// 	}
 
 	// while(0){
 

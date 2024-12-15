@@ -264,8 +264,41 @@ for type_name, vars in registers.items():
     enum_data = {}
     #offset += 1
     fileGen.blankLine(1)
-    
 
+
+# define message enums
+fileGen.blankLine(2)
+fileGen.blankLine(1, "Define message enums")
+severities = deviceDescriptor["message_severities"]
+t = {}
+for severity_name, severity_value in severities.items():
+    t[severity_value] = {"name":severity_name, "comment":""}
+
+fileGen.enum("message_severities", t, "uint8_t", "message severities")
+
+object_id = 0
+total_messages = 0
+message_values = []
+for object_name, object_messages in deviceDescriptor["messages"].items():
+
+    messages_enum = {}
+    message_id = 0
+    for message_name, message_info in object_messages.items():
+        value = (severities[message_info["severity"]] << 28) | (object_id << 12) | message_id
+        message_values.append(value)
+
+        messages_enum[message_id+total_messages] = {"name":message_name, "comment":message_info["description"]}
+        message_id += 1
+
+    total_messages += message_id
+
+    fileGen.enum(f"{object_name}_messages", messages_enum, "uint32_t", f"{object_name} messages")
+
+    object_id += 1
+
+fileGen.array("inline uint32_t", "message_values", total_messages, initValue=message_values, comment="message values")
+
+fileGen.define("MESSAGE_COUNT", total_messages, "total number of messages")
 
 fileGen.saveFile()
 

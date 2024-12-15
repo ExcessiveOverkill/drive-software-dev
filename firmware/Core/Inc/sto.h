@@ -20,11 +20,11 @@ class sto{
 
         sto(uint32_t i);
         
-        // error_severity init(void);
+        // severity init(void);
 
-        // error_severity enable(void);
+        // severity enable(void);
 
-        // error_severity disable(void);
+        // severity disable(void);
 
         bool output_allowed(void);
 

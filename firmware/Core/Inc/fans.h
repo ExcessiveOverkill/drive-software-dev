@@ -19,10 +19,10 @@
 class fans{
     private:
 
-      bool FAN_SPEED_HIGH   = errors::error_severity::WARNING;
-      bool FAN_SPEED_LOW    = errors::error_severity::WARNING;
-      bool FAN_SPEED_ZERO   = errors::error_severity::WARNING;
-      bool FAN_TIMER_FAULT  = errors::error_severity::ERROR;
+      bool FAN_SPEED_HIGH   = errors::severity::WARNING;
+      bool FAN_SPEED_LOW    = errors::severity::WARNING;
+      bool FAN_SPEED_ZERO   = errors::severity::WARNING;
+      bool FAN_TIMER_FAULT  = errors::severity::ERROR;
 
       volatile uint16_t tachometer_1_value;
       volatile uint16_t tachometer_2_value;
