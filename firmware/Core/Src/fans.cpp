@@ -2,6 +2,10 @@
 
 #define APB1_Timer_Clock_Frequency 100000000
 
+void fans::log_message(uint32_t message) {
+    log->log_message(message);
+}
+
 void fans::configure_GPIOB6_for_PWM(void){
 
     // Enable clock for GPIOB
@@ -103,8 +107,6 @@ void fans::configure_TIM8_for_tachometer(void){
 }
 
 
-
-
 fans::fans()
 {
     configure_GPIOB6_for_PWM();
@@ -122,31 +124,35 @@ uint32_t fans::set_speed(uint32_t speed_rpm)
     // Limit speed
     if (speed_rpm > MAX_FAN_SPEED_RPM) speed_rpm = MAX_FAN_SPEED_RPM;
 
-    // Calculate duty cycle
-    uint32_t duty_cycle = (speed_rpm * 1000) / MAX_FAN_SPEED_RPM;
-    TIM4->CCR1 = duty_cycle;
+    set_speed_rpm = speed_rpm;
 
-    // Return Highest Error
     return 0;
 }
 
-uint32_t fans::get_fan_1_speed()
+uint32_t fans::get_fan_1_speed(void)
 {
-
-    tachometer_1_value = TIM3->CNT;
-
-    TIM3->CNT = 0;
-
-    return (uint32_t)tachometer_1_value;
+    return tachometer_1_value;
 }
 
-uint32_t fans::get_fan_2_speed()
+uint32_t fans::get_fan_2_speed(void)
 {
-
-    tachometer_2_value = TIM8->CNT;
-
-    TIM8->CNT = 0;
-    
-    return (uint32_t)tachometer_2_value;
+    return tachometer_2_value;
 }
 
+void fans::SysTick_Handler(uint32_t sysTick_counter)
+{
+    if(sysTick_counter % 100 == 0)
+    {
+        // Set fan speed
+        uint32_t duty_cycle = (set_speed_rpm * 1000) / MAX_FAN_SPEED_RPM;
+        TIM4->CCR1 = duty_cycle;
+
+        // Read tachometer 1 values
+        tachometer_1_value = TIM3->CNT;
+        TIM3->CNT = 0;
+
+        // Read tachometer 2 values
+        tachometer_2_value = TIM8->CNT;
+        TIM8->CNT = 0;
+    }
+}
