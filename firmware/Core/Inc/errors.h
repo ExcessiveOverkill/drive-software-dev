@@ -11,23 +11,21 @@
 
 #include "device_descriptor.h"
 #include "stm32f413xx.h"
-#include <memory.h>
-
 
 
 class errors {
 public:
-    enum error_severity : unsigned int {
+    enum class error_severity : unsigned int {
         WARNING = 0b001 << 24,
         ERROR = 0b010 << 24,
         CRITICAL = 0b100 << 24
     };
 
     
-    enum error_types : unsigned int {   // will later be defined by device_descriptor.h
-        FAN_SPEED_LOW = 0 | WARNING,
-        FAN_SPEED_ZERO = 1 | WARNING,
-        FAN_TIMER_FAULT = 2 | ERROR
+    enum class error_types : unsigned int {   // will later be defined by device_descriptor.h
+        FAN_SPEED_LOW = 0 | uint32_t(error_severity::WARNING),
+        FAN_SPEED_ZERO = 1 | uint32_t(error_severity::WARNING),
+        FAN_TIMER_FAULT = 2 | uint32_t(error_severity::ERROR)
     };
     
 
