@@ -362,11 +362,6 @@ void CPU_init(void){
 extern "C" {
 
 void SysTick_Handler(void){
-
-    if(sysTick_counter % 100 == 0){
-		Fans.get_fan_1_speed();
-		Fans.get_fan_2_speed();
-	}
 	
 	userIO.update();
 	sysTick_counter++;

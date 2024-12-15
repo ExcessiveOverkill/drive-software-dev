@@ -17,6 +17,35 @@ hard_parameters:
   # incorrect values may result in catastrophic hardware failure
   # these are set at build time and cannot be modified by the controller
 
+
+  MESSAGE:
+    value: 0b0001 << 28
+    var_type: "uint32_t"
+    unit: ""
+    readable_name: ""
+    description: "Normal message"
+
+  WARNING:
+    value: 0b0010 << 28
+    var_type: "uint32_t"
+    unit: ""
+    readable_name: ""
+    description: "Warning message"
+
+  ERROR:
+    value: 0b0100 << 28
+    var_type: "uint32_t"
+    unit: ""
+    readable_name: ""
+    description: "Error message"
+
+  CRITICAL:
+    value: 0b1000 << 28
+    var_type: "uint32_t"
+    unit: ""
+    readable_name: ""
+    description: "Critical error message"
+
   max_fan_speed_rpm:
     value: 12400
     var_type: "uint32_t"
