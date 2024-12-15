@@ -1,5 +1,9 @@
 #include "sto.h"
 
+void sto::log_message(uint32_t message) {
+    log->log_message(message);
+}
+
 
 /*!
     \brief Create object for managing STO IO
