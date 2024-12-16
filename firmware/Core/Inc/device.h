@@ -14,19 +14,23 @@ class device {
 
     private:
 
+        // create all low level classes
         communication Comm; // communication with the controller
-        errors Errors; // error/warning handling
+        logging Log; // error/warning handling
         fans Fans; // fan control
         user_io UserIO; // user interface (DIP switches and LEDs)
         current_sense_interface CurrentSense; // current sensing
         phase_pwm PhasePWM; // PWM generation
         adc_interface Adc; // ADC sampling
         sto Sto; // safe torque off
-        // other global/hardware classes should be added here
         
-
+        // create all modes
+        #define MODE_COUNT 1
         Mode* modes[MODE_COUNT]; // array of all modes
-        Mode* current_mode; // pointer to the current mode
+        Mode* current_mode = nullptr; // pointer to the current mode
+
+        Mode PMSM_torque_control; // torque control mode for PMSM motor
+        
 
         void init(); // initialize all hardware and modes
 
