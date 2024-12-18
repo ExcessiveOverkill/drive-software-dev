@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <math.h>
 #include "device_descriptor.h"
+#include "logging.h"
 
 #define DFSDM_FOSR (1000*ADCCLK/PWMCLK/2 - 2)
 #define SHUNT_RESISTANCE 0.005	// (Ohms) Current shunt resistance
@@ -19,6 +20,8 @@
 // Class for managing DFSDM hardware
 class current_sense_interface{
     private:
+
+        logging* logs;
 
         uint32_t incomplete_conversion_count = 0;
 
@@ -30,7 +33,7 @@ class current_sense_interface{
         int32_t phase_V_milliamps = 0;
         int32_t phase_W_milliamps = 0;
 
-        current_sense_interface(uint32_t i);
+        current_sense_interface(logging* logs);
         
         void init(void);
 

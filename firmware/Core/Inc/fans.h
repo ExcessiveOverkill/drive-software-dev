@@ -15,20 +15,13 @@
 
 #define PWM_ticks 1000*SYSCLK/PWMCLK/2
 
-#define MESSAGE   0b0001 << 28
-#define WARNING   0b0010 << 28
-#define ERROR     0b0100 << 28
-#define CRITICAL  0b1000 << 28
-
-
 class fans{
     private:
-
-      uint16_t class_identifer = 0xFA65;
-
       logging* logs;
 
-      void log_message(uint32_t message);
+      const uint32_t tach_sample_period_ms = 500;
+      const uint32_t tach_sample_count = SYSTICK_FREQUENCY * tach_sample_period_ms / 1000;
+      uint32_t update_cycle_count = 0;
 
       uint32_t set_speed_rpm = 0;
       uint16_t tachometer_1_rpm = 0;
@@ -45,15 +38,19 @@ class fans{
 
     public:
 
-        fans(void);
+        const uint32_t max_rpm = MAX_FAN_SPEED_RPM;
         
+        fans(logging* logs);
+
+        void init();
+
         uint32_t set_speed(uint32_t speed_rpm);
 
-        uint32_t get_fan_1_speed(void);
+        uint32_t get_fan_1_speed_rpm(void);
 
-        uint32_t get_fan_2_speed(void);
+        uint32_t get_fan_2_speed_rpm(void);
 
-        void SysTick_Handler(uint32_t sysTick_counter);
+        void SysTick_Handler();
 };
 
 

@@ -15,18 +15,17 @@
 // Class for managing STO hardware
 class sto{
     private:
-
-        uint16_t class_identifer = 0x0510;
-        
-        logging* log;
-
-        void log_message(uint32_t message);
+        logging* log;        
 
     public:
+        sto(logging* log);
 
-        sto(uint32_t i);
-        
+        void init(void);
+
         bool output_allowed(void);
+
+        void enable(void);
+        void disable(void);
 
         uint32_t check_fault(void);
 

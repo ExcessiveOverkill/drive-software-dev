@@ -16,6 +16,8 @@
 class logging {
 public:
 
+    void init();
+
     uint64_t* milliseconds = nullptr;   // pointer to the global milliseconds variable
     
 
@@ -28,7 +30,7 @@ private:
     uint64_t last_ok_error_times_millis[identifiers_count]; // last time the error was inactive
     uint32_t persistent_error_trigger_times_millis[identifiers_count]; // how long an id must be logged as persistent active before it's actually triggered
 
-    message_severities active_severity = message_severities(0);   // the current active severity of the system
+    message_severities active_severity = message_severities(message_values[0]);   // the current active severity of the system
     uint64_t last_reset_time_millis = 0;    // the last time all logs were reset
 
 public:

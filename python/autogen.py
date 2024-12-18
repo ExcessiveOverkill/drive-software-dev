@@ -19,6 +19,7 @@ class cFileGenerator:
 // last updated at {datetime.datetime.now()}
 
 #pragma once
+#include <stdint.h>
 
 """
 

@@ -10,12 +10,15 @@
 
 #include "stm32f413xx.h"
 #include <assert.h>
+#include "logging.h"
 
 
 // Class for managing user IO hardware (LEDs and DIP switches)
 class user_io{
     private:
-        uint32_t update_period_ms;  // Period the update() function will be called at
+        logging* logs;
+
+        const uint32_t update_period_ms = 1000 / SYSTICK_FREQUENCY;  // Period the update() function will be called at
 
         uint32_t slow_blink_time_ms = 2000;   // half of the total period
         uint32_t medium_blink_time_ms = 500;  // half of the total period
@@ -83,8 +86,8 @@ class user_io{
           on = 16
         };
         
-        user_io(uint32_t update_period_);
-        
+        user_io(logging* logs);
+
         void init(void);
         
         uint32_t get_errors(void);
@@ -93,9 +96,9 @@ class user_io{
 
         void set_led_state(uint32_t led_select_, uint32_t led_mode_);
 
-        void update(void);
+        void SysTick_Handler(void);
 
-        void I2C1_Event_Interrupt(void);
+        void I2C1_EV_IRQHandler(void);
 
-        void I2C1_Error_Interrupt(void);
+        void I2C1_ER_IRQHandler(void);
 };

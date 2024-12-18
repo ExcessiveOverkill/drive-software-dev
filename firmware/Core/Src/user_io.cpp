@@ -1,15 +1,9 @@
 #include "user_IO.h"
+#include "device_descriptor.h"
 
-
-/*!
-    \brief Create object for managing user IO (LEDs and DIP switches)
-    
-    \param update_period_ Period in milliseconds at which the update() function will be called.
-*/
-user_io::user_io(uint32_t update_period_){
-    update_period_ms = update_period_;
+user_io::user_io(logging* logs){
+    this->logs = logs;
 }
-
 
 /*!
     \brief Initialize hardware and configure IO expander
@@ -112,7 +106,7 @@ void user_io::set_led_state(uint32_t led_select_, uint32_t led_mode_){
     
     \note a call to this function STARTS the update cycle, it is non-blocking so the actual states will be done updating at some later time
 */
-void user_io::update(void){
+void user_io::SysTick_Handler(void){
 
     if(error){  // reset I2C if it gets stuck in an error state
         I2C1->CR1 |= I2C_CR1_SWRST;	// Reset I2C
@@ -235,7 +229,7 @@ void user_io::increment_update_step(void){
     \brief handler for i2c event interrupts
     \note this needs to be placed in `I2C1_EV_IRQHandler(void)`
 */
-void user_io::I2C1_Event_Interrupt(void){
+void user_io::I2C1_EV_IRQHandler(void){
 
     volatile bool start_bit_sent = 0;
     volatile bool address_sent = 0;
@@ -356,6 +350,6 @@ void user_io::I2C1_Event_Interrupt(void){
     \brief handler for i2c error interrupts
     \note this needs to be placed in `I2C1_ER_IRQHandler(void)`
 */
-void user_io::I2C1_Error_Interrupt(void){
+void user_io::I2C1_ER_IRQHandler(void){
     error = 1;  //TODO: add support for more error states
 }

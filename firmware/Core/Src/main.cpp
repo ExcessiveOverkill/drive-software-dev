@@ -1,30 +1,20 @@
 #include "main.h"
 
-int main(void){
+device* Device = nullptr;
+#include "interrupt_catch.h"
 
-	device Device;
-	Device.run();
+int main(void){
+	device dev = device();
+	Device = &dev;
+
+	Device->init();
+	
+	Device->run();
 
 	return 1;	// should never reach this
 }
 
 // int main(void){
-
-// 	enum States current_state = STARTUP;
-// 	enum States requested_state = IDLE;
-
-// 	enum Enter_run_steps enter_run_step = ENABLE_PWM;
-// 	enum Enter_idle_steps enter_idle_step = CHECK_OK_TO_START;
-// 	enum Enter_fault_steps enter_fault_step = DISABLE_PWM;
-
-// 	CPU_init();
-// 	TIM2_init();
-
-// 	SysTick->LOAD = (SYSCLK*1000000/8) / SYSTICK_FREQUENCY;
-	
-// 	NVIC_EnableIRQ(SysTick_IRQn);
-
-// 	SysTick->CTRL = 0b11;	// enable counter and exception
 
 // 	userIO.init();
 // 	//adc.init();
@@ -327,181 +317,145 @@ int main(void){
 	// 	//userIO.set_led_state(~userIO.get_switch_states(), userIO.off);
 
 	// }
-}
+//}
 
-void delay_us(uint32_t time_us) {
-	// blocking delay up to 42949672 us
-	 TIM2->CNT = 0;
-	 while (TIM2->CNT < time_us*SYSCLK);
-}
+// extern "C" {
 
-void CPU_init(void){
-
-
-	FLASH->ACR |= FLASH_ACR_ICEN			// Enable intruction cache
-			    | FLASH_ACR_DCEN 			// Enable Date Cache
-			    | FLASH_ACR_PRFTEN 			// Enable prefetch
-			    | FLASH_ACR_LATENCY_3WS;	// Set Flash latency to 3 wait states
-
-	RCC->PLLCFGR = (8 << 0)    // Set PLL_M to 8. The input clock frequency is divided by this value.
-	             | (SYSCLK << 6)  // Set PLL_N, the multiplication factor for the PLL. SYSCLK is presumably defined elsewhere, representing the desired system clock frequency.
-	             | (0 << 16)   // Set PLL_P to 2 (0 in register corresponds to PLL_P = 2). The PLL output frequency is divided by this value to get the system clock.
-	             | (4 << 24);  // Set PLL_Q to 4. This value is used for USB, SDIO, and random number generator clocks, but it's not critical for the main system clock (SYSCLK).
-
-	// Turn on the PLL and wait for it to become stable
-	RCC->CR |= RCC_CR_PLLON;  // Enable the PLL
-	while (!(RCC->CR & RCC_CR_PLLRDY)); // Wait for PLL to be ready (PLL ready flag)
-
-	// Switch the system clock source to the PLL
-	RCC->CFGR &= ~RCC_CFGR_SW;  // Clear the clock switch bits
-	RCC->CFGR |= RCC_CFGR_SW_PLL;  // Set the clock source to PLL
-	while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL); // Wait until PLL is used as the system clock source
-
-	RCC->CFGR |= RCC_CFGR_PPRE1_DIV2;	// divide by 2 to get 50Mhz for APB1 peripherals
-
-	// Update the SystemCoreClock variable to the new clock speed
-	SystemCoreClockUpdate(); // Update the SystemCoreClock global variable with the new clock frequency
+// void SysTick_Handler(void){
 	
-	SystemInit();	// Enable FPU
-}
+// 	userIO.update();
+// 	sysTick_counter++;
+// }
 
-extern "C" {
+// void I2C1_EV_IRQHandler(void){
+// 	userIO.I2C1_EV_IRQHandler();
+// }
 
-void SysTick_Handler(void){
+// void DMA2_Stream0_IRQHandler(void){
+// 	adc.dma_interrupt_handler();
+// }
+
+// void DMA2_Stream1_IRQHandler(void){
+// 	comm.dma_stream1_interrupt_handler();
+// }
+
+// void TIM1_UP_TIM10_IRQHandler(void) {
+// 	if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
+//  		TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
+// 		TIM1->CCR1 = CAPTURE_COMP_U;
+// 		TIM1->CCR2 = CAPTURE_COMP_V;
+// 		TIM1->CCR3 = CAPTURE_COMP_W;
+// 		phase_pwm_updated_flag = true;	
+// 	}
+// }
+
+// void USART6_IRQHandler(void){
+// 	comm.usart6_interrupt_handler();
+// }   
+// }
+
+// extern "C" {
+
+// void USART6_Error_Interrupt_Handler(void){
+
+// 	if (USART6->SR & USART_SR_PE) {
+//         Parity_Error_Callback();
+// 		// Cleared by read or write to USART_DR_DR
+//     }
+// 	if (USART6->SR & USART_SR_FE) {
+//         Framing_Error_Callback();
+// 		// Cleared by reading USART_DR_DR 
+//     }
+// 	if (USART6->SR & USART_SR_NE) {
+//         Noise_Detected_Error_Callback();
+// 		// Cleared by reading USART_DR_DR 
+//     }
+// 	if (USART6->SR & USART_SR_ORE) {
+//         Overrun_Error_Callback();
+// 		// Cleared by reading USART_DR_DR 
+//     }
+// }
+// }
+
+
+// void TIM2_init(){
+
+// 	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;		// Enable TIM2   Clock
+
+// 	TIM2->PSC = 0; // Prescaler
+// 	TIM2->ARR = 0xFFFFFFFF;  // Max auto-reload value
+// 	TIM2->CR1 |= TIM_CR1_CEN; // Enable TIM2
+// }
+
+
+
+// int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q){
+//     // Amplitude invarient
+
+//     // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
+//     // assert(fabs(A + B + C) < 0.1);    // Assert ABC currents agree
+    
+//     float X = (2 * A - B - C) * (1 / 3);
+//     float Y = (B - C) * (sqrt(3) / 3);
+    
+//     float co = cos(theta);
+//     float si = sin(theta);
+    
+//     *D = co*X + si*Y;
+//     *Q = co*Y - si*X;
+    
+//     return 0;
+// }
+
+
+// int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C){
+//     // Amplitude invarient
 	
-	userIO.update();
-	sysTick_counter++;
-}
-
-void I2C1_EV_IRQHandler(void){
-	userIO.I2C1_Event_Interrupt();
-}
-
-void DMA2_Stream0_IRQHandler(void){
-	adc.dma_interrupt_handler();
-}
-
-void DMA2_Stream1_IRQHandler(void){
-	comm.dma_stream1_interrupt_handler();
-}
-
-void TIM1_UP_TIM10_IRQHandler(void) {
-	if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
- 		TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
-		TIM1->CCR1 = CAPTURE_COMP_U;
-		TIM1->CCR2 = CAPTURE_COMP_V;
-		TIM1->CCR3 = CAPTURE_COMP_W;
-		phase_pwm_updated_flag = true;	
-	}
-}
-
-void USART6_IRQHandler(void){
-	comm.usart6_interrupt_handler();
-}   
-}
-
-extern "C" {
-
-void USART6_Error_Interrupt_Handler(void){
-
-	if (USART6->SR & USART_SR_PE) {
-        Parity_Error_Callback();
-		// Cleared by read or write to USART_DR_DR
-    }
-	if (USART6->SR & USART_SR_FE) {
-        Framing_Error_Callback();
-		// Cleared by reading USART_DR_DR 
-    }
-	if (USART6->SR & USART_SR_NE) {
-        Noise_Detected_Error_Callback();
-		// Cleared by reading USART_DR_DR 
-    }
-	if (USART6->SR & USART_SR_ORE) {
-        Overrun_Error_Callback();
-		// Cleared by reading USART_DR_DR 
-    }
-}
-}
-
-
-void TIM2_init(){
-
-	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;		// Enable TIM2   Clock
-
-	TIM2->PSC = 0; // Prescaler
-	TIM2->ARR = 0xFFFFFFFF;  // Max auto-reload value
-	TIM2->CR1 |= TIM_CR1_CEN; // Enable TIM2
-}
-
-
-
-int Clarke_and_Park_Transform(float theta, float A, float B, float C, float *D, float *Q){
-    // Amplitude invarient
-
-    // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
-    // assert(fabs(A + B + C) < 0.1);    // Assert ABC currents agree
+//     // Inputs
+//     // theta = electrical angle [0, 2*pi] radians
+//     // D     = direct current [] amps
+//     // Q     = quadrature current [] amps
     
-    float X = (2 * A - B - C) * (1 / 3);
-    float Y = (B - C) * (sqrt(3) / 3);
+//     // Outputs
+//     // A, B, C
     
-    float co = cos(theta);
-    float si = sin(theta);
+//     // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
     
-    *D = co*X + si*Y;
-    *Q = co*Y - si*X;
+//     float co = cos(theta);
+//     float si = sin(theta);
     
-    return 0;
-}
+//     float X = co*D - si*Q;
+//     float Y = si*D + co*Q;
+    
+//     *A = X;
+//     *B = -(1.0 / 2.0) * X;
+//     *C = *B - (sqrt(3.0) / 2.0) * Y;
+//     *B += (sqrt(3.0) / 2.0) * Y;
+    
+//     // assert(fabs(*A + *B + *C) < 0.001);    // Assert ABC currents agree
+    
+//     return 0;
+// }
 
 
-int Inverse_Carke_and_Park_Transform(float theta, float D, float Q, float *A, float *B, float *C){
-    // Amplitude invarient
-	
-    // Inputs
-    // theta = electrical angle [0, 2*pi] radians
-    // D     = direct current [] amps
-    // Q     = quadrature current [] amps
-    
-    // Outputs
-    // A, B, C
-    
-    // assert((0 <= theta) && (theta <= 2*pi));    // Assert theta
-    
-    float co = cos(theta);
-    float si = sin(theta);
-    
-    float X = co*D - si*Q;
-    float Y = si*D + co*Q;
-    
-    *A = X;
-    *B = -(1.0 / 2.0) * X;
-    *C = *B - (sqrt(3.0) / 2.0) * Y;
-    *B += (sqrt(3.0) / 2.0) * Y;
-    
-    // assert(fabs(*A + *B + *C) < 0.001);    // Assert ABC currents agree
-    
-    return 0;
-}
+// float Current_Controller(float EI){
+// 	// Input:  EI = Error Current (A)
+// 	// Output: RV = Requested Voltage (V)
 
+// 	float P_Term = Kp * EI;
+// 	I_Term += Ki *EI;
 
-float Current_Controller(float EI){
-	// Input:  EI = Error Current (A)
-	// Output: RV = Requested Voltage (V)
+// 	if (I_Term > I_term_limit){
+// 		I_Term = I_term_limit;
+// 	}
+// 	else if (I_Term < -I_term_limit){
+// 		I_Term = -I_term_limit;
+// 	}
 
-	float P_Term = Kp * EI;
-	I_Term += Ki *EI;
+// 	float RV = P_Term + I_Term;
 
-	if (I_Term > I_term_limit){
-		I_Term = I_term_limit;
-	}
-	else if (I_Term < -I_term_limit){
-		I_Term = -I_term_limit;
-	}
-
-	float RV = P_Term + I_Term;
-
-	return RV;
-}
+// 	return RV;
+// }
 
 
 extern "C" {

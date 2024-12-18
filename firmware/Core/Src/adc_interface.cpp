@@ -1,12 +1,10 @@
 #include "adc_interface.h"
 
 
-/*!
-    \brief Create object for managing ADC (analog to digital converter)
-*/
-adc_interface::adc_interface(uint32_t i){
-
+adc_interface::adc_interface(logging* logs){
+    this->logs = logs;
 }
+
 
 /*!
     \brief Initialize hardware and start continuous conversions

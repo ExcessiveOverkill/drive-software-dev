@@ -1,9 +1,9 @@
 #include "fans.h"
 
-#define APB1_Timer_Clock_Frequency 100000000
+#define APB1_Timer_Clock_Frequency 100000000    // TODO: get this from some higher level configuration
 
-void fans::log_message(uint32_t message) {
-    log->log_message(message);
+fans::fans(logging* logs){
+    this->logs = logs;
 }
 
 void fans::configure_GPIOB6_for_PWM(void){
@@ -28,8 +28,8 @@ void fans::configure_TIM4_for_PWM(void){
     // Set auto-reload register for 1000 ticks (for 25kHz PWM)
     TIM4->ARR = 1000 - 1;
 
-    // Set compare value to 500 (50% duty cycle initially)
-    TIM4->CCR1 = 500;
+    // Set compare value to 0 (0% duty cycle initially)
+    TIM4->CCR1 = 0;
 
     // Configure TIM4 channel 1 in PWM mode 1
     TIM4->CCMR1 &= ~(TIM_CCMR1_OC1M);
@@ -107,7 +107,7 @@ void fans::configure_TIM8_for_tachometer(void){
 }
 
 
-fans::fans()
+void fans::init()
 {
     configure_GPIOB6_for_PWM();
     configure_TIM4_for_PWM();
@@ -129,30 +129,35 @@ uint32_t fans::set_speed(uint32_t speed_rpm)
     return 0;
 }
 
-uint32_t fans::get_fan_1_speed(void)
+uint32_t fans::get_fan_1_speed_rpm(void)
 {
-    return tachometer_1_value;
+    return tachometer_1_rpm;
 }
 
-uint32_t fans::get_fan_2_speed(void)
+uint32_t fans::get_fan_2_speed_rpm(void)
 {
-    return tachometer_2_value;
+    return tachometer_2_rpm;
 }
 
-void fans::SysTick_Handler(uint32_t sysTick_counter)
-{
-    if(sysTick_counter % 100 == 0)
+void fans::SysTick_Handler()
+{   
+    if(update_cycle_count >= tach_sample_count)
     {
         // Set fan speed
         uint32_t duty_cycle = (set_speed_rpm * 1000) / MAX_FAN_SPEED_RPM;
         TIM4->CCR1 = duty_cycle;
 
         // Read tachometer 1 values
-        tachometer_1_value = TIM3->CNT;
+        tachometer_1_rpm = TIM3->CNT * SYSTICK_FREQUENCY * (60/2) / tach_sample_count;  // 2 pulses per revolution, convert to RPM
         TIM3->CNT = 0;
 
         // Read tachometer 2 values
-        tachometer_2_value = TIM8->CNT;
+        tachometer_2_rpm = TIM8->CNT * SYSTICK_FREQUENCY * (60/2) / tach_sample_count;  // 2 pulses per revolution, convert to RPM
         TIM8->CNT = 0;
+
+        update_cycle_count = 0;
+    }
+    else{
+        update_cycle_count++;
     }
 }

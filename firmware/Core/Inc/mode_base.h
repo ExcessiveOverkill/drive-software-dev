@@ -20,13 +20,13 @@ class Mode {
         void TIM1_UP_TIM10_IRQHandler();
         // TODO: add other interrupt handlers
 
-        message_severity update();  // run an update, called from the SYS_TICK handler at low frequency (high frequency updates should be triggered by interrupts)
+        message_severities update();  // run an update, called from the SYS_TICK handler at low frequency (high frequency updates should be triggered by interrupts)
 
-        message_severity enter_mode();  // enable the mode, called when the mode is entered
-        message_severity exit_mode();  // disable the mode, called when the mode is exited
+        message_severities enter_mode();  // enable the mode, called when the mode is entered
+        message_severities exit_mode();  // disable the mode, called when the mode is exited
 
-        message_severity enter_idle();  // enable the idle state
-        message_severity enter_run();  // enable the run state
+        message_severities enter_idle();  // enable the idle state
+        message_severities enter_run();  // enable the run state
 
     protected:
 
@@ -38,7 +38,7 @@ class Mode {
         adc_interface* Adc;
         sto* Sto;
         
-        errors* Errors;     // access to error handling
+        logging* logs;     // access to message handling
 
         communication* Comm;    // access to communication, this allows access to all registers accessible by the controller
 

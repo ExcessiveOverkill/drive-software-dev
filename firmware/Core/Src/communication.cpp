@@ -1,11 +1,8 @@
 #include "communication.h"
 
 
-/*!
-    \brief Create object for managing UART
-*/
-communication::communication(uint32_t i){
-
+communication::communication(logging* logs){
+	this->logs = logs;
 }
 
 /*!

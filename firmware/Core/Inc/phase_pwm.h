@@ -11,17 +11,19 @@
 #include "stm32f413xx.h"
 #include <assert.h>
 #include "device_descriptor.h"
+#include "logging.h"
 
 #define PWM_ticks 1000*SYSCLK/PWMCLK/2
 
 // Class for managing phase outpuit PWM hardware
 class phase_pwm{
     private:
+      
+          logging* logs;
 
 
     public:
-
-        phase_pwm(uint32_t i);
+        phase_pwm(logging* logs);
         
         void init(void);
 

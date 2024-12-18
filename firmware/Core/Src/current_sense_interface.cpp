@@ -1,12 +1,10 @@
 #include "current_sense_interface.h"
 
 
-/*!
-    \brief Create object for managing DFSDM (peripheral for reading phase currents)
-*/
-current_sense_interface::current_sense_interface(uint32_t i){
-
+current_sense_interface::current_sense_interface(logging* logs){
+    this->logs = logs;
 }
+
 
 /*!
     \brief Initialize hardware

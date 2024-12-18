@@ -1,15 +1,7 @@
 #include "sto.h"
 
-void sto::log_message(uint32_t message) {
-    log->log_message(message);
-}
-
-
-/*!
-    \brief Create object for managing STO IO
-*/
-sto::sto(uint32_t i){
-
+sto::sto(logging* log){
+	this->log = log;
 }
 
 /*!
@@ -17,31 +9,31 @@ sto::sto(uint32_t i){
     
     \note Run this after clocks are configured but before the main loop is started
 */
-// void sto::init(){
+void sto::init(){
     
-// 	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;    // Enable GPIOC  Clock
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;    // Enable GPIOC  Clock
 
-// 	GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODER10) | GPIO_MODER_MODER10_0;		// set STO_EN (PC10) to output
-// 	GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODER11);		// set STO_CH1_FBK (PC11) to input
-// 	GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODER12);		// set STO_CH2_FBK (PC12) to input
+	GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODER10) | GPIO_MODER_MODER10_0;		// set STO_EN (PC10) to output
+	GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODER11);		// set STO_CH1_FBK (PC11) to input
+	GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODER12);		// set STO_CH2_FBK (PC12) to input
 
-// }
-
-
-// /*!
-//     \brief Enable drive
-// */
-// void sto::enable(){
-// 	GPIOC->BSRR |= GPIO_BSRR_BS10;	// turn on STO_EN output (note this also needs both external STO channels to be on to allow the drive to output)
-// }
+}
 
 
-// /*!
-//     \brief Disable drive
-// */
-// void sto::disable(){
-// 	GPIOC->BSRR |= GPIO_BSRR_BR10;	// turn off STO_EN output (note this also needs both external STO channels to be on to allow the drive to output)
-// }
+/*!
+    \brief Enable drive
+*/
+void sto::enable(){
+	GPIOC->BSRR |= GPIO_BSRR_BS10;	// turn on STO_EN output (note this also needs both external STO channels to be on to allow the drive to output)
+}
+
+
+/*!
+    \brief Disable drive
+*/
+void sto::disable(){
+	GPIOC->BSRR |= GPIO_BSRR_BR10;	// turn off STO_EN output (note this also needs both external STO channels to be on to allow the drive to output)
+}
 
 
 /*!

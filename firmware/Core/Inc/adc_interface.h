@@ -10,6 +10,8 @@
 
 #include "stm32f413xx.h"
 #include <assert.h>
+#include "device_descriptor.h"
+#include "logging.h"
 
 // sense voltage dividers, integer values only
 #define PHASE_SENSE_DIVIDER 1000000/5000
@@ -20,6 +22,9 @@
 // Class for managing ADC hardware
 class adc_interface{
     private:
+
+        logging* logs;
+
         uint32_t raw_adc_data[8];   // ADC data is packed from 16bit to 32bit and 16 samples are stored
 
         uint32_t phase_U_millivolts = 0;
@@ -42,9 +47,8 @@ class adc_interface{
         void convert_data(void);
         
     public:
+        adc_interface(logging* logs);
 
-        adc_interface(uint32_t i);
-        
         void init(void);
 
         void start_sample(void);

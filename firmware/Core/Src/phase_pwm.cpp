@@ -1,12 +1,10 @@
 #include "phase_pwm.h"
 
 
-/*!
-    \brief Create object for TIM1 peripheral for outputting main PWM
-*/
-phase_pwm::phase_pwm(uint32_t i){
-
+phase_pwm::phase_pwm(logging* logs){
+	this->logs = logs;
 }
+
 
 /*!
     \brief Initialize hardware
@@ -96,7 +94,7 @@ void phase_pwm::disable(){
     \brief Check if the break input flag has been set
 */
 bool phase_pwm::break_flag_triggered(){
-	return TIM1->SR & TIM_SR_BIF != 0;     // get break input flag
+	return (TIM1->SR & TIM_SR_BIF) != 0;     // get break input flag
 }
 
 

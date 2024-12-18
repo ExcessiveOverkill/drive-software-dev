@@ -12,21 +12,24 @@
 #include <assert.h>
 #include <memory.h>
 #include "device_descriptor.h"
+#include "logging.h"
 
 #define MAX_PACKET_SIZE 4+CYCLIC_ADDRESS_COUNT
 // Class for managing uart hardware
 class communication{
     private:
 
+        logging* logs;
+
         //TODO: find out if the 32bit array is even needed by the DMA
         union rx_data{
           uint32_t data_words[MAX_PACKET_SIZE];   // rx bytes are packed into this array by the DMA
-          uint8_t data_bytes[MAX_PACKET_SIZE*4];  // same data as rx_data, but packed as bytes
+          uint8_t data_bytes[MAX_PACKET_SIZE*4];  // same data as rx_data, but as bytes
         };
         
         union tx_data{
           uint32_t data_words[MAX_PACKET_SIZE];   // tx bytes are unpacked from this array by the DMA
-          uint8_t data_bytes[MAX_PACKET_SIZE*4];  // same data as tx_data, but packed as bytes
+          uint8_t data_bytes[MAX_PACKET_SIZE*4];  // same data as tx_data, but as bytes
         };
 
         rx_data rx;
@@ -84,7 +87,7 @@ class communication{
         bool receive_complete = false;
         bool receive_started = false;
 
-        communication(uint32_t i);
+        communication(logging* logs);
         
         void init(void);
 

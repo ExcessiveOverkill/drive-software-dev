@@ -1,5 +1,9 @@
 #include "logging.h"
 
+void logging::init(){
+    // nothing
+}
+
 message_severities logging::get_active_severity(void){
     return active_severity;
 }
