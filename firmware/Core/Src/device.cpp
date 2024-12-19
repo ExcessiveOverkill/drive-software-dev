@@ -10,7 +10,6 @@ void device::init(){
 
     logs.init();
     // Initialize all the low level classes
-    Comm.init();
     Fans.init();
     UserIO.init();
     CurrentSense.init();
@@ -18,8 +17,17 @@ void device::init(){
     Adc.init();
     Sto.init();
 
+    // TODO: add watchdog timer to disable PWM if system is unresponsive
+
+    
     // short startup test
-    startup_demo();
+    //startup_demo();
+
+    // wait until we have a valid communication address before initializing communication
+    Comm.set_device_address(UserIO.get_switch_states());
+    Comm.init();
+
+    
 }
 
 void device::CPU_init(){
@@ -123,6 +131,19 @@ void device::run(){
 
 void device::update(){
     // TODO: Add low frequency update code
+
+    update_leds();
+}
+
+void device::update_leds(){
+    // LED 1 shown connection status
+    if(Comm.is_ok()){
+        UserIO.set_led_state(0b0001, UserIO.blink_fast);
+    }
+    else{
+        UserIO.set_led_state(0b0001, UserIO.blink_slow);
+    }
+
 }
 
 void device::critical_shutdown(){
@@ -164,6 +185,7 @@ void device::DMA2_Stream1_IRQHandler(void){
 }
 
 void device::TIM1_UP_TIM10_IRQHandler(void){
+    get_microseconds();
     // TODO: Add TIM1_UP_TIM10_IRQHandler code
     if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
         TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag

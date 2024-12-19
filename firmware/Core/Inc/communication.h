@@ -38,6 +38,12 @@ class communication{
         uint8_t expected_rx_length = 4;   // 4 x 32bit words is the smallest possible packet
         uint8_t expected_tx_length = 4;   // 4 x 32bit words is the smallest possible packet
         uint8_t device_address = DEVICE_STARTING_ADDRESS;
+        
+        bool timed_out = true;
+        const uint64_t* microseconds = 0;
+        uint64_t last_valid_packet_time_us = 0;
+        const uint32_t timeout_limit_us = 10 * 1e3; // time between valid packets before timeout
+        void reset_timeout(void);
 
         // sequential data transfer
         uint32_t sequential_register_address = 0;
@@ -68,7 +74,7 @@ class communication{
 
         uint8_t get_register_size(uint16_t raw_address);
         uint32_t calculate_crc(uint32_t *data, uint8_t data_length);
-        bool interpret_rx_packet();
+        int8_t interpret_rx_packet();
         void generate_tx_packet();
 
         enum controller_register_access_result: uint8_t{
@@ -87,9 +93,14 @@ class communication{
         bool receive_complete = false;
         bool receive_started = false;
 
-        communication(logging* logs);
+        communication(logging* logs, const uint64_t* microseconds);
         
         void init(void);
+
+        void set_device_address(uint8_t address);
+
+        void update_time_us(void);
+        bool is_ok(void);  // check if communication is working correctly (no timeout)
 
         void start_receive(void);
         bool rx_idle_detected(void);

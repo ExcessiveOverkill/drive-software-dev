@@ -1,7 +1,8 @@
 #include "communication.h"
 
 
-communication::communication(logging* logs){
+communication::communication(logging* logs, const uint64_t* microseconds){
+	this->microseconds = microseconds;
 	this->logs = logs;
 }
 
@@ -35,7 +36,6 @@ void communication::init(){
 	USART6->CR1 |= USART_CR1_IDLEIE;	// enable idle detect interrupt
 
 	USART6->CR1 |= USART_CR1_RE;	// Enable Receiver
-	USART6->CR1 |= USART_CR1_TE;	// Enable Transmitter
 
 	// setup DMA2 stream1 for USART6 RX (stream 2 is also available)
 	// setup DMA2 stream6 for USART6 TX	(stream 7 is also available)
@@ -51,11 +51,8 @@ void communication::init(){
 	DMA2_Stream1->CR |= 5 << DMA_SxCR_CHSEL_Pos;	// select channel 5 for rx stream
 	DMA2_Stream6->CR |= 5 << DMA_SxCR_CHSEL_Pos;	// select channel 5 for tx stream
 
-    //DMA2_Stream1->CR |= DMA_SxCR_CIRC;  // enable circular mode
-	//DMA2_Stream6->CR |= DMA_SxCR_CIRC;  // enable circular mode
-
-    //DMA2_Stream1->CR |= 0b00 << DMA_SxCR_PSIZE_Pos;     // set peripheral data size to 8bit (default)
-	//DMA2_Stream6->CR |= 0b00 << DMA_SxCR_PSIZE_Pos;     // set peripheral data size to 8bit (default)
+    DMA2_Stream1->CR |= 0b00 << DMA_SxCR_PSIZE_Pos;     // set peripheral data size to 8bit (default)
+	DMA2_Stream6->CR |= 0b00 << DMA_SxCR_PSIZE_Pos;     // set peripheral data size to 8bit (default)
     DMA2_Stream1->CR |= 0b10 << DMA_SxCR_MSIZE_Pos;     // set memory data size to 32bit
 	DMA2_Stream6->CR |= 0b10 << DMA_SxCR_MSIZE_Pos;     // set memory data size to 32bit
 
@@ -86,9 +83,12 @@ void communication::init(){
 	//DMA2_Stream6->FCR |= 0b10 << DMA_SxFCR_FTH_Pos;     // Set FIFO threshold to full
 
     DMA2_Stream1->CR |= DMA_SxCR_TCIE;  // Trigger interrupt when RX transfer to memory is complete
+	//DMA2_Stream6->CR |= DMA_SxCR_TCIE;  // Trigger interrupt when TX transfer to peripheral is complete
 
-    NVIC_EnableIRQ(DMA2_Stream1_IRQn);  // Configure NVIC for DMA RX Inturrpt	TODO: make sure this priority is lower than the PWM update IRQ
-	//NVIC_EnableIRQ(DMA2_Stream6_IRQn);  // Configure NVIC for DMA TX Inturrpt
+	USART6->CR3 |= USART_CR3_DMAT;	// Enable DMA for tx
+
+    NVIC_EnableIRQ(DMA2_Stream1_IRQn);  // Configure NVIC for DMA RX Interrupt	TODO: make sure this priority is lower than the PWM update IRQ
+	//NVIC_EnableIRQ(DMA2_Stream6_IRQn);  // Configure NVIC for DMA TX Interrupt
 
 	NVIC_EnableIRQ(USART6_IRQn);	// Enable USART6 interrupts
 
@@ -98,6 +98,20 @@ void communication::init(){
 	//TODO: verify no AHB error will be generated due to crossing a 1Kbyte boundary
 }
 
+bool communication::is_ok(){
+	return !timed_out;
+}
+
+void communication::update_time_us(){
+	if(*microseconds - last_valid_packet_time_us > timeout_limit_us){
+		timed_out = true;
+	}
+}
+
+void communication::reset_timeout(){
+	timed_out = false;
+	last_valid_packet_time_us = *microseconds;
+}
 
 /*!
     \brief Configure DMA for a new TX packet size in 32 bit words, the maximum size is defined by MAX_PACKET_SIZE
@@ -113,9 +127,9 @@ void communication::set_tx_packet_length(uint32_t length){
 
 	DMA2_Stream6->NDTR = length * 4;	// set number of 8 bit transfer cycles
 
-	if(stream_enabled){
-		DMA2_Stream6->CR |= DMA_SxCR_EN; // Enable DMA stream
-	}
+	// if(stream_enabled){
+	// 	DMA2_Stream6->CR |= DMA_SxCR_EN; // Enable DMA stream
+	// }
 	expected_tx_length = length;
 }
 
@@ -142,6 +156,14 @@ void communication::set_rx_packet_length(uint32_t length){
 
 
 /*!
+	\brief Set device address offset from DEVICE_STARTING_ADDRESS
+*/
+void communication::set_device_address(uint8_t address){
+	device_address = address + DEVICE_STARTING_ADDRESS;
+}
+
+
+/*!
     \brief Receive data packet
 */
 void communication::start_receive(){
@@ -156,7 +178,19 @@ void communication::start_receive(){
     \brief Send data packet
 */
 void communication::start_transmit(){
-	//USART6->CR3 |= USART_CR3_DMAT;	// Enable DMA for tx
+	
+	set_tx_packet_length(expected_tx_length);	// set the number of 32 bit words to transfer
+	
+	// clear DMA flags
+	DMA2->HIFCR |= DMA_HIFCR_CDMEIF6 | DMA_HIFCR_CTEIF6 | DMA_HIFCR_CFEIF6 | DMA_HIFCR_CHTIF6 | DMA_HIFCR_CTCIF6;
+	USART6->CR1 &= ~USART_CR1_TE;	// Disable Transmitter
+	USART6->SR &= ~USART_SR_TC_Msk;	// clear transmission complete flag
+
+	DMA2_Stream6->CR |= DMA_SxCR_EN; // Enable DMA TX stream
+
+	//USART6->DR = 0b10101010;	// send dummy byte
+	USART6->CR1 |= USART_CR1_TE;	// Enable Transmitter
+	
 }
 
 
@@ -179,7 +213,6 @@ void communication::dma_stream1_interrupt_handler(){
 		receive_started = false;
         DMA2->LIFCR |= DMA_LIFCR_CTCIF1;	// clear trasfer finished flag
     }
-	
 }
 
 
@@ -190,13 +223,21 @@ void communication::usart6_interrupt_handler(){
 
 	if(USART6->SR & USART_SR_IDLE_Msk){		// RX IDLE state detected (incomming transmission over)
 		clear_rx_idle_flag();
-        restart_rx_dma();	// TODO: only do this on invalid packet receive (maybe)
+        restart_rx_dma();	// TODO: only do this on invalid packet receive? (maybe)
 		start_receive();
 
-		if(interpret_rx_packet()){	// if this returns false, the rx data was either invalid or not addressed to this device
+		int8_t result = interpret_rx_packet();
+		if(result == 0){	// packet addressed to this device
 			// start TX transmission upon valid packet receive
 			generate_tx_packet();
 			start_transmit();
+			reset_timeout();
+		}
+		else if(result == 1){	// broadcast packet
+			reset_timeout();
+		}
+		else{	// invalid packet
+			// do nothing
 		}
 		
     }
@@ -211,14 +252,17 @@ uint32_t communication::calculate_crc(uint32_t *data, uint8_t data_length){
 	return CRC->DR;
 }
 
-bool communication::interpret_rx_packet(){
+int8_t communication::interpret_rx_packet(){
 	if(calculate_crc(rx.data_words, expected_rx_length-1) == rx.data_words[expected_rx_length-1]){	// verify CRC is correct
 		if(rx.data_bytes[0] == device_address){	// verify device address matches
 			//TODO: update registers
-			return true;
+			return 0;	// address match
+		}
+		if(rx.data_bytes[0] == 0xFF){	// broadcast address
+			return 1;	// broadcast mode
 		}
 	}
-	return false;
+	return -1;	// invalid packet
 }
 
 void communication::pack_8_to_8_array(uint8_t data_in, uint16_t &offset, uint8_t *array){

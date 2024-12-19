@@ -23,8 +23,14 @@ class device {
 
         logging logs; // error/warning handling
 
+        uint64_t microseconds = 0; // microseconds counter
+        const uint64_t* micros = &microseconds; // pointer to the microseconds variable
+        uint64_t get_microseconds(); // get the current time in microseconds
+        void delay_us(uint32_t time_us); // blocking delay for a specified time in microseconds
+        void delay_ms(uint32_t time_ms); // blocking delay for a specified time in milliseconds
+
         // create all low level classes
-        communication Comm = communication(&logs); // communication with the controller
+        communication Comm = communication(&logs, micros); // communication with the controller
         fans Fans = fans(&logs); // fan control
         user_io UserIO = user_io(&logs); // user interface (DIP switches and LEDs)
         current_sense_interface CurrentSense = current_sense_interface(&logs); // current sensing
@@ -40,17 +46,13 @@ class device {
 
         void update(); // low frequency update, called from SysTick_Handler
 
+        void update_leds(); // update the LEDs
+
         void critical_shutdown(); // immediately disable system and enter a safe state (also exits the current mode)
 
         void enter_mode(Mode* mode); // enter a new mode
 
         void CPU_init(); // initialize the CPU
-
-        uint64_t microseconds = 0; // microseconds counter
-        //const uint64_t* micros = &microseconds; // pointer to the microseconds variable
-        uint64_t get_microseconds(); // get the current time in microseconds
-        void delay_us(uint32_t time_us); // blocking delay for a specified time in microseconds
-        void delay_ms(uint32_t time_ms); // blocking delay for a specified time in milliseconds
 
         void timer_us_init(); // initialize a timer for microseconds
 

@@ -70,7 +70,7 @@ uint32_t user_io::get_errors(void){
     
     \return Binary representation of the switch states
 */
-uint32_t user_io::get_switch_states(void){
+uint8_t user_io::get_switch_states(void){
     return switch_state;
 }
 

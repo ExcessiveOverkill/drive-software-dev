@@ -60,7 +60,7 @@ void phase_pwm::init(){
 	TIM1->DIER |= TIM_DIER_UIE; // Enable Update Interrupt
 	
 	NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
-	// NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 1); // Set priority as needed
+	// NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 1); // TODO: Set priority as needed
 
     TIM1->CR1 |= TIM_CR1_CEN;		// Enable counting (this does not enable main outputs yet)
 

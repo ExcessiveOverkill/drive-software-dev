@@ -201,11 +201,11 @@ hard_parameters:
     description: "Number of consecutive same bits to receive from the ADC before triggering short circuit detection.\nMax is 127 (ADCs send a different bit every 128 cycles even at full scale)"
 
   device_starting_address:
-    value: 127
+    value: 0
     var_type: "uint8_t"
     unit: "address"
     readable_name: "Device starting address"
-    description: "rs422 to address to start at, DIP switches may be used to increment it"
+    description: "rs422 address to start at, DIP switches may be used to increment it, read at power on"
 
   cyclic_address_count:
     value: 32

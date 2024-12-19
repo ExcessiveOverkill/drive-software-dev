@@ -30,7 +30,7 @@ class user_io{
 
         uint8_t blink_state = 0b10000;  //states of each led mode  (bit 0:off 1:slow, 2:medium, 3:fast 4:on)
 
-        uint32_t switch_state = 0;
+        uint8_t switch_state = 0;
         uint32_t led_state;
         uint8_t led_modes[4] = {0, 0, 0, 0};
 
@@ -92,7 +92,7 @@ class user_io{
         
         uint32_t get_errors(void);
 
-        uint32_t get_switch_states(void);
+        uint8_t get_switch_states(void);
 
         void set_led_state(uint32_t led_select_, uint32_t led_mode_);
 
