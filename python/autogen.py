@@ -10,18 +10,7 @@ class cFileGenerator:
         self.fullFilePath = filePath
         self.fileName = filePath.split("/")[-1]
 
-        self.file = f"""
-//////////////////// AUTO GENERATED FILE ////////////////////
-
-// do not manually modify this file, modify "device_descriptor.yaml" instead
-// run autogen.py to update (called at each build by default)
-
-// last updated at {datetime.datetime.now()}
-
-#pragma once
-#include <stdint.h>
-
-"""
+        self.file = ""
 
     def define(self, name: str, value: str, comment: str = "") -> None:
         if(comment != ""):
@@ -73,17 +62,50 @@ class cFileGenerator:
 
         self.file += "\n};"
 
-    def array(self, type: str, name: str, size: int, initValue = None, comment: str = "") -> None:
+    def array(self, type: str, name: str, size: int, initValue = None, comment: str = "", newline=False) -> None:
+        if(comment != ""):
+            self.file += f"\n// {comment}"
+
         self.file += f"\n{type} {name}[{size}]"
+        initList = []
+
         if(isinstance(initValue, int) or isinstance(initValue, float)):
-            self.file += f" = {{{str(initValue)*size}}}"
-        elif(isinstance(initValue, list)):
-            self.file += f" = {{{str(initValue)[1:-1]}}}"
+            initList = [initValue]*size
+        else:
+            initList = initValue
+
+        self.file += " = {"
         
-        self.file += ";"
+        for i in initList:
+            if newline:
+                self.file += "\n\t"
+            else:
+                self.file += " "
+
+            if(isinstance(i, str)):
+                self.file += f"{i},"
+            else:
+                self.file += f"{i},"
+
+        self.file = self.file[:-1]
+
+        if newline:
+            self.file += "\n"
+        self.file += "};"
+            
+    def struct(self, name: str, struct: dict, comment: str = "") -> None:
+        self.file += f"\nstruct {name}"
+        self.file += "{"
+
         if(comment != ""):
             self.file += f"\t\t// {comment}"
-
+        
+        for var_name, var_info in struct.items():
+            self.file += f"\n\t{var_info["type"]} {var_name} = {var_info['value']};"
+            self.file += f"\t\t// ({var_info['unit']}) {var_info['description']}"
+        
+        self.file += "\n};"
+    
     def ifDefine(self, defineToCheck: str) -> None:
         self.file += f"\n#ifndef {defineToCheck}"
 
@@ -110,21 +132,49 @@ except FileNotFoundError:
 
 
 # generate header file for device firmware
-fileGen = cFileGenerator(currentDir + "/../firmware/Core/Inc/device_descriptor.h")
+deviceFileGen = cFileGenerator(currentDir + "/../firmware/Core/Inc/device_descriptor.h")
+deviceFileGen.file = f"""
+    //////////////////// AUTO GENERATED FILE ////////////////////
 
-fileGen.define("HARDWARE_TYPE", deviceDescriptor["hardware"]["type"])
-fileGen.define("HARDWARE_VERSION", deviceDescriptor["hardware"]["version"])
-fileGen.define("FIRMWARE_VERSION", deviceDescriptor["firmware"]["version"])
-fileGen.blankLine(2)
+    // do not manually modify this file, modify "device_descriptor.yaml" instead
+    // run autogen.py to update (called at each build by default)
+
+    // last updated at {datetime.datetime.now()}
+
+    #pragma once
+    #include <stdint.h>
+
+    """
+
+controllerFileGen = cFileGenerator(currentDir + f"/device_{deviceDescriptor['hardware']['type']}_descriptor.h")
+controllerFileGen.file = f"""
+    //////////////////// AUTO GENERATED FILE ////////////////////
+
+    // this file specifies how the controller should interact with the device
+
+    // do not manually modify this file, modify the "device_descriptor.yaml" associated with the device firmware instead
+
+    // last updated at {datetime.datetime.now()}
+
+    #pragma once
+    #include <stdint.h>
+
+    """
+controllerFileGen.file += f"namespace em_serial_device_{deviceDescriptor['hardware']['type']} {{\n\n"
+
+deviceFileGen.define("HARDWARE_TYPE", deviceDescriptor["hardware"]["type"])
+deviceFileGen.define("HARDWARE_VERSION", deviceDescriptor["hardware"]["version"])
+deviceFileGen.define("FIRMWARE_VERSION", deviceDescriptor["firmware"]["version"])
+deviceFileGen.blankLine(2)
 
 # define hardware params
 for param in deviceDescriptor["hard_parameters"].items():
     singleLineDescription = param[1]['description'].replace('\n', ' ')
     if(param[1]['unit'] != ""):
-        fileGen.define(param[0].upper(), param[1]["value"], f"({param[1]['unit']}) {singleLineDescription}")
+        deviceFileGen.define(param[0].upper(), param[1]["value"], f"({param[1]['unit']}) {singleLineDescription}")
     else:
-        fileGen.define(param[0].upper(), param[1]["value"], f"{singleLineDescription}")
-fileGen.blankLine(2)
+        deviceFileGen.define(param[0].upper(), param[1]["value"], f"{singleLineDescription}")
+deviceFileGen.blankLine(2)
 
 
 # generate cyclic register access registers
@@ -137,145 +187,108 @@ for index in range(cyclic_count):
     deviceDescriptor["registers"][f"cyclic_write_address_{index}"] = cyclic_write_info
 
 
-
-# group registers into their respective data types
-registers = {
-    "int8_t":{"read/write":[], "read":[], "write":[]},
-    "int16_t":{"read/write":[], "read":[], "write":[]},
-    "int32_t":{"read/write":[], "read":[], "write":[]},
-    "uint8_t":{"read/write":[], "read":[], "write":[]},
-    "uint16_t":{"read/write":[], "read":[], "write":[]},
-    "uint32_t":{"read/write":[], "read":[], "write":[]},
-    "float":{"read/write":[], "read":[], "write":[]}
+# generate struct for device
+vars = {
+    "int8_t":{},
+    "int16_t":{},
+    "int32_t":{},
+    "uint8_t":{},
+    "uint16_t":{},
+    "uint32_t":{},
+    "float":{}
 }
-
-# ADDRESS_SPACE = 2047    # the maximum number of each variable type
-# fileGen.define("ADDRESS_SPACE", ADDRESS_SPACE, "the maximum number of each variable type")
-
-
+struct_vars = {}
+struct_vars["hardware_type"] = {
+    "type":"uint32_t",
+    "unit":"",
+    "value":deviceDescriptor["hardware"]["type"],
+    "description":"hardware type",
+    "permissions":["read"]
+}
+struct_vars["hardware_version"] = {
+    "type":"uint32_t",
+    "unit":"",
+    "value":deviceDescriptor["hardware"]["version"],
+    "description":"hardware version",
+    "permissions":["read"]
+}
+struct_vars["firmware_version"] = {
+    "type":"uint32_t",
+    "unit":"",
+    "value":deviceDescriptor["firmware"]["version"],
+    "description":"firmware version",
+    "permissions":["read"]
+}
+cyclic_read_address_start = None
+cyclic_write_address_start = None
+i = 0
 for register_name, register_info in deviceDescriptor["registers"].items():
 
-    if(register_info["var_type"] not in registers.keys()):      # catch bad variable types
+    if(register_info["var_type"] not in vars.keys()):      # catch bad variable types
         raise Exception(f"Unknown var_type: {register_info['var_type']} for {register_name} register")
-    
-    if(register_info["permissions"].count("read/write") != 0):
-        registers[register_info["var_type"]]["read/write"].append([register_name, register_info])
-    elif(register_info["permissions"].count("read") != 0):
-        registers[register_info["var_type"]]["read"].append([register_name, register_info])
-    elif(register_info["permissions"].count("write") != 0):
-        registers[register_info["var_type"]]["write"].append([register_name, register_info])
-    else:
-        raise Exception(f"unknown read/write permissions: ({register_info['permissions']}) for {register_name} register")
+    t = {
+        "type":register_info["var_type"],
+        "value":register_info["value"],
+        "unit":register_info["unit"],
+        "description":register_info["description"],
+        "permissions":register_info["permissions"]
+    }
 
-# define register sizes
-regCounts = {}
-for type_name, vars in registers.items():
-    regCounts[type_name] = len(vars["read"]) + len(vars["write"]) + len(vars["read/write"])
-    fileGen.define(f"{type_name.upper()}_REGISTER_COUNT", regCounts[type_name])
-fileGen.blankLine(1)
+    if(register_name.startswith("cyclic_read_address_") and cyclic_read_address_start is None):
+        cyclic_read_address_start = i
+    if(register_name.startswith("cyclic_write_address_") and cyclic_write_address_start is None):
+        cyclic_write_address_start = i
 
-#define register offsets
-offset = 0
-for type_name, count in regCounts.items():
-    fileGen.define(f"{type_name.upper()}_REGISTER_OFFSET", str(offset))
-    offset += int(count)
-fileGen.blankLine(1)
+    vars[register_info["var_type"]][register_name] = t
+
+    struct_vars[register_name] = t
+    i += 1
+
+deviceFileGen.struct("device_struct", struct_vars, "device variables")
+deviceFileGen.blankLine(1)
+deviceFileGen.file += "\nstatic device_struct vars;"
+deviceFileGen.blankLine(1)
 
 
-# define register arrays and set default values
-for type_name, vars in registers.items():
-    defaultValues = []
-    for permission_type in vars.values():
-        for register in permission_type:
-            defaultValues.append(register[1]["value"])
-    if(regCounts[type_name] > 0):
-        fileGen.array(f"inline {type_name}", f"{type_name}_data_array", regCounts[type_name], initValue=defaultValues)
-    else:   # always make arrays at least 1 long, even if there are no registers of that type
-        fileGen.array(f"inline {type_name}", f"{type_name}_data_array", 1, initValue=0)
-fileGen.blankLine(2)
+pointers = []
+data_info = []
+read_permissions = []
+write_permissions = []
+for name, data in struct_vars.items():
+    var_data = 0
+    pointers.append(f"&vars.{name}")
+    if(data["permissions"].count("read") != 0):
+        var_data |= 1 << 0
 
-# create enums for all registers
-fileGen.blankLine(1, "link each register to a global address")
-offset = 0
-old_offset = offset
-enum_data = {}
-for type_name, vars in registers.items():
+    if(data["permissions"].count("write") != 0):
+        var_data |= 1 << 1
+    size = 0
+    if(data["type"] in ["int8_t", "uint8_t"]):
+        size = 1
+    elif(data["type"] in ["int16_t", "uint16_t"]):
+        size = 2
+    elif(data["type"] in ["int32_t", "uint32_t", "float"]):
+        size = 4
+    var_data |= size << 4
+    data_info.append(var_data)
 
-    enum_data["start"] = offset
-    enum_data["end"] = offset
-    for register_index, register in enumerate(vars["read/write"]):
-        singleLineDescription = register[1]["description"].replace('\n', ' ')
-        if(register[1]['unit'] != ""):
-            enum_data[str(offset)] = {
-                "name":f"{register[0]}_register",
-                "comment":f"({register[1]['unit']}) {singleLineDescription}"}
-        else:
-            enum_data[str(offset)] = {
-                "name":f"{register[0]}_register",
-                "comment":f"{singleLineDescription}"}
-        enum_data["end"] = offset
-        offset += 1
-    if(offset == old_offset):
-        offset += 1
-    old_offset = offset
-    fileGen.enum(f"{type_name}_register_rw", enum_data, "uint16_t", f"read/write {type_name} registers")
-
-    enum_data = {}
-    #offset += 1
-    enum_data["start"] = offset
-    enum_data["end"] = offset
-    for register_index, register in enumerate(vars["read"]):
-        singleLineDescription = register[1]["description"].replace('\n', ' ')
-        if(register[1]['unit'] != ""):
-            enum_data[str(offset)] = {
-                "name":f"{register[0]}_register",
-                "comment":f"({register[1]['unit']}) {singleLineDescription}"}
-        else:
-            enum_data[str(offset)] = {
-                "name":f"{register[0]}_register",
-                "comment":f"{singleLineDescription}"}
-        enum_data["end"] = offset
-        offset += 1
-    if(offset == old_offset):
-        offset += 1
-    old_offset = offset
-    fileGen.enum(f"{type_name}_register_r", enum_data, "uint16_t", f"read {type_name} registers")
-
-    enum_data = {}
-    #offset += 1
-    enum_data["start"] = offset
-    enum_data["end"] = offset
-    for register_index, register in enumerate(vars["write"]):
-        singleLineDescription = register[1]["description"].replace('\n', ' ')
-        if(register[1]['unit'] != ""):
-            enum_data[str(offset)] = {
-                "name":f"{register[0]}_register",
-                "comment":f"({register[1]['unit']}) {singleLineDescription}"}
-        else:
-            enum_data[str(offset)] = {
-                "name":f"{register[0]}_register",
-                "comment":f"{singleLineDescription}"}
-        enum_data["end"] = offset
-        offset += 1
-    if(offset == old_offset):
-        offset += 1
-    old_offset = offset
-    fileGen.enum(f"{type_name}_register_w", enum_data, "uint16_t", f"write {type_name} registers")
-
-    enum_data = {}
-    #offset += 1
-    fileGen.blankLine(1)
-
+deviceFileGen.define("CYCLIC_READ_ADDRESS_POINTER_START", cyclic_read_address_start)
+deviceFileGen.define("CYCLIC_WRITE_ADDRESS_POINTER_START", cyclic_write_address_start)
+deviceFileGen.define("VAR_COUNT", len(pointers), "number of variables")
+deviceFileGen.array("static void*", "var_pointers", len(pointers), initValue=pointers, comment="pointers to all variables", newline=True)
+#fileGen.array("static const bool", "read_permissions", len(read_permissions), initValue=read_permissions, comment="read permissions for all variables")
+#fileGen.array("static const bool", "write_permissions", len(write_permissions), initValue=write_permissions, comment="write permissions for all variables")
+deviceFileGen.array("static const uint8_t", "data_info", len(data_info), initValue=data_info, comment="data info for all variables")
 
 # define message enums
-fileGen.blankLine(2)
-fileGen.blankLine(1, "Define message enums")
+deviceFileGen.blankLine(2)
+deviceFileGen.blankLine(1, "Define message enums")
 severities = deviceDescriptor["message_severities"]
 t = {}
 for severity_name, severity_value in severities.items():
     t[severity_value] = {"name":severity_name, "comment":""}
 
-fileGen.enum("message_severities", t, "uint8_t", "message severities")
+deviceFileGen.enum("message_severities", t, "uint8_t", "message severities")
 
 object_id = 0
 total_messages = 0
@@ -293,16 +306,17 @@ for object_name, object_messages in deviceDescriptor["messages"].items():
 
     total_messages += message_id
 
-    fileGen.enum(f"{object_name}_messages", messages_enum, "uint32_t", f"{object_name} messages")
+    deviceFileGen.enum(f"{object_name}_messages", messages_enum, "uint32_t", f"{object_name} messages")
 
     object_id += 1
 
-fileGen.array("inline uint32_t", "message_values", total_messages, initValue=message_values, comment="message values")
+deviceFileGen.array("inline uint32_t", "message_values", total_messages, initValue=message_values, comment="message values")
 
-fileGen.define("MESSAGE_COUNT", total_messages, "total number of messages")
+deviceFileGen.define("MESSAGE_COUNT", total_messages, "total number of messages")
 
-fileGen.saveFile()
+deviceFileGen.saveFile()
+controllerFileGen.saveFile()
 
-print("\n\nAUTOGEN: Successfully updated device_descriptor.h\n\n")
+print("\n\nAUTOGEN: Successfully updated auto generated files\n\n")
 
 

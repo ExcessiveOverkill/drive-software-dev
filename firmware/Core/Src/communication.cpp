@@ -1,8 +1,8 @@
 #include "communication.h"
+#include <math.h>
 
 
-communication::communication(logging* logs, const uint64_t* microseconds){
-	this->microseconds = microseconds;
+communication::communication(logging* logs){
 	this->logs = logs;
 }
 
@@ -23,6 +23,9 @@ void communication::init(){
 	GPIOA->AFR[1] |= 8 << GPIO_AFRH_AFSEL11_Pos;	// set PA11 alternate function to 8 (USART6)
 	GPIOA->AFR[1] |= 8 << GPIO_AFRH_AFSEL12_Pos;	// set PA12 alternate function to 8 (USART6)
 
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;	// Enable GPIOC  Clock
+	GPIOC->MODER = (GPIOC->MODER & ~GPIO_MODER_MODER8) | GPIO_MODER_MODER8_0;		// set TX_EN (PC8) to output
+
 
 	USART6->CR1 |= USART_CR1_OVER8;	// set 8x oversampling
 
@@ -34,6 +37,7 @@ void communication::init(){
 	USART6->BRR |= 0<<USART_BRR_DIV_Fraction;	// Program Baud rate fraction
 
 	USART6->CR1 |= USART_CR1_IDLEIE;	// enable idle detect interrupt
+	USART6->CR1 |= USART_CR1_TCIE;	// enable transmission complete interrupt
 
 	USART6->CR1 |= USART_CR1_RE;	// Enable Receiver
 
@@ -45,8 +49,9 @@ void communication::init(){
     DMA2_Stream1->CR &= ~(DMA_SxCR_EN); // Disable DMA stream
 	DMA2_Stream6->CR &= ~(DMA_SxCR_EN); // Disable DMA stream
 
-    while(DMA2_Stream1->CR & (DMA_SxCR_EN_Msk));    // Wait for stream to disable
-	while(DMA2_Stream6->CR & (DMA_SxCR_EN_Msk));    // Wait for stream to disable
+    while(DMA2_Stream1->CR & (DMA_SxCR_EN_Msk)){}    // Wait for stream to disable
+
+	while(DMA2_Stream6->CR & (DMA_SxCR_EN_Msk)){}    // Wait for stream to disable
 
 	DMA2_Stream1->CR |= 5 << DMA_SxCR_CHSEL_Pos;	// select channel 5 for rx stream
 	DMA2_Stream6->CR |= 5 << DMA_SxCR_CHSEL_Pos;	// select channel 5 for tx stream
@@ -89,28 +94,126 @@ void communication::init(){
 
     NVIC_EnableIRQ(DMA2_Stream1_IRQn);  // Configure NVIC for DMA RX Interrupt	TODO: make sure this priority is lower than the PWM update IRQ
 	//NVIC_EnableIRQ(DMA2_Stream6_IRQn);  // Configure NVIC for DMA TX Interrupt
-
+	NVIC_SetPriority(DMA2_Stream1_IRQn, 4);
 	NVIC_EnableIRQ(USART6_IRQn);	// Enable USART6 interrupts
+	NVIC_SetPriority(USART6_IRQn, 3);
 
     DMA2_Stream1->CR |= DMA_SxCR_EN; // Enable DMA RX stream
 	//DMA2_Stream6->CR |= DMA_SxCR_EN; // Enable DMA TX stream
 
 	//TODO: verify no AHB error will be generated due to crossing a 1Kbyte boundary
+
+	// setup us timer for synchronization
+	timer_us_init();
 }
 
 bool communication::is_ok(){
 	return !timed_out;
 }
 
-void communication::update_time_us(){
-	if(*microseconds - last_valid_packet_time_us > timeout_limit_us){
+void communication::update_timeout(){
+	if(get_microseconds() - last_valid_packet_time_us > timeout_limit_us){
 		timed_out = true;
 	}
 }
 
+void communication::timer_us_init(){
+	// setup us counting
+	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;		// Enable TIM2 Clock
+    __DSB();
+	TIM2->PSC = (SYSCLK*1e6 / 1e6) - 1; // Prescaler to count in microseconds
+    TIM2->EGR |= TIM_EGR_UG; // Generate an update event to update the prescaler
+	TIM2->ARR = 0xFFFFFFFF;  // Max auto-reload value (2^32 - 1)
+    TIM2->DIER |= TIM_DIER_UIE; // Enable update interrupt
+
+	// setup input capture to measure serial RX starting edges
+	// TIM2_CH1 pin PA15 is externally connected to USART6 RX pin PA12
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;    // Enable GPIOA  Clock
+	GPIOA->MODER |= GPIO_MODER_MODER15_1;	// set PA15 (CH2) as alternate function
+	GPIOA->AFR[1] |= 1 << GPIO_AFRH_AFSEL15_Pos;	// set PA15 alternate function to 1 (TIM2)
+
+	TIM2->CCMR1 |= 0b01 << TIM_CCMR1_CC1S_Pos;	// set CH1 to input capture
+	TIM2->CCER |= 0b01 << TIM_CCER_CC1P_Pos;	// set to capture on falling edge
+	TIM2->CCER |= TIM_CCER_CC1E;	// enable capture
+
+	TIM2->CR2 |= 0b101 << TIM_CR2_MMS_Pos;	// use output compare 2 as TRGO output (this is used to reset the main PWM timer)
+
+
+	TIM2->CR1 |= TIM_CR1_CEN; // Enable TIM2
+    NVIC_EnableIRQ(TIM2_IRQn); // Enable TIM2 interrupt
+    microseconds = 0; // Initialize the microseconds counter
+}
+
+void communication::restart_rx_sync_capture(){
+	//volatile uint32_t capture = TIM2->CCR2;	// read the capture register
+	TIM2->SR &= ~TIM_SR_CC1IF;	// clear the capture interrupt flag
+	TIM2->SR &= ~TIM_SR_CC1OF;	// clear the capture overflow flag
+}
+
+void communication::sync_timer_us(){
+	// uint32_t capture = TIM2->CCR1;	// read the capture register
+	// uint32_t diff = capture % target_rx_period;
+	// int8_t trim = 0;
+
+	// if(diff > target_rx_period/2){
+	// 	trim = 1;
+	// }
+	// else if(diff < target_rx_period/2){
+	// 	trim = -1;
+	// }
+}
+
+void communication::set_sync_frequency(uint16_t frequency_hz){
+	target_rx_period = 1e6 / frequency_hz;
+	allowed_period_error = target_rx_period / 20;	// 5% error allowed
+}
+
+void communication::set_pwm_timer_sync_offset_us(uint16_t offset_us){
+	pwm_timer_sync_offset_us = offset_us;
+}
+
+void communication::resync_system(){
+	if(!enable_resync) return;
+	enable_resync = false;
+	SysTick->VAL = 0;	// reset the systick counter (note this is not a hardware sync so it is not perfect, but close enough)
+
+	// using the last time of an rx broadcast packet, we can calculate when we want to restart the PWM timer
+	// this we do want to be exact, so we will use hardware sync
+
+	TIM1->BDTR &= ~TIM_BDTR_MOE;	// disable PWM outputs
+
+	uint32_t reset_time = get_microseconds() + target_rx_period + pwm_timer_sync_offset_us;	// target time
+
+	TIM2->CCER &= ~TIM_CCER_CC2E;	// disable output
+	TIM2->CCMR1 |= 0b100 << TIM_CCMR1_OC2M_Pos;	// force output low
+
+	TIM2->CCR2 = reset_time;	// set the reset time
+	TIM2->CCMR1 |= 0b001 << TIM_CCMR1_OC2M_Pos;	// trigger output high on match
+	TIM2->CCER |= TIM_CCER_CC2E;	// enable output
+}
+
+void communication::TIM2_IRQHandler(){
+	TIM2->SR &= ~TIM_SR_UIF; // Clear the update interrupt flag
+    microseconds += 0x100000000; // Add 2^32 to the microseconds counter
+}
+
+uint64_t communication::get_microseconds(){
+    microseconds &= 0xFFFFFFFF00000000; // Clear the lower 32 bits of the microseconds counter
+    microseconds |= (TIM2->CNT & 0xFFFFFFFF); // Add the current timer value to the microseconds counter
+    return microseconds;
+}
+
 void communication::reset_timeout(){
 	timed_out = false;
-	last_valid_packet_time_us = *microseconds;
+	last_valid_packet_time_us = get_microseconds();
+}
+
+void communication::enable_tx(){
+	GPIOC->BSRR |= GPIO_BSRR_BS8;
+}
+
+void communication::disable_tx(){
+	GPIOC->BSRR |= GPIO_BSRR_BR8;
 }
 
 /*!
@@ -118,19 +221,14 @@ void communication::reset_timeout(){
 */
 void communication::set_tx_packet_length(uint32_t length){
 
-	bool stream_enabled = DMA2_Stream6->CR & (DMA_SxCR_EN_Msk);
-
-	if(stream_enabled){
-		DMA2_Stream6->CR &= ~(DMA_SxCR_EN); // Disable DMA stream
-		while(DMA2_Stream6->CR & (DMA_SxCR_EN_Msk));    // Wait for stream to disable
-	}
-
-	DMA2_Stream6->NDTR = length * 4;	// set number of 8 bit transfer cycles
+	// bool stream_enabled = DMA2_Stream6->CR & (DMA_SxCR_EN_Msk);
 
 	// if(stream_enabled){
-	// 	DMA2_Stream6->CR |= DMA_SxCR_EN; // Enable DMA stream
+	// 	DMA2_Stream6->CR &= ~(DMA_SxCR_EN); // Disable DMA stream
+	// 	while(DMA2_Stream6->CR & (DMA_SxCR_EN_Msk));    // Wait for stream to disable
 	// }
-	expected_tx_length = length;
+
+	DMA2_Stream6->NDTR = length * 4;	// set number of 8 bit transfer cycles
 }
 
 
@@ -189,6 +287,7 @@ void communication::start_transmit(){
 	DMA2_Stream6->CR |= DMA_SxCR_EN; // Enable DMA TX stream
 
 	//USART6->DR = 0b10101010;	// send dummy byte
+	enable_tx();
 	USART6->CR1 |= USART_CR1_TE;	// Enable Transmitter
 	
 }
@@ -222,14 +321,16 @@ void communication::dma_stream1_interrupt_handler(){
 void communication::usart6_interrupt_handler(){
 
 	if(USART6->SR & USART_SR_IDLE_Msk){		// RX IDLE state detected (incomming transmission over)
-		clear_rx_idle_flag();
-        restart_rx_dma();	// TODO: only do this on invalid packet receive? (maybe)
-		start_receive();
-
-		int8_t result = interpret_rx_packet();
+        
+		int8_t result = verify_rx_packet();
 		if(result == 0){	// packet addressed to this device
-			// start TX transmission upon valid packet receive
-			generate_tx_packet();
+			// interpret sequential data
+			interpret_rx_sequential_data();
+			// cyclic data can be interpreted outside of the rx handler
+
+			// start TX transmission
+			//generate_tx_cyclic_data();
+			generate_tx_sequential_data();
 			start_transmit();
 			reset_timeout();
 		}
@@ -239,8 +340,17 @@ void communication::usart6_interrupt_handler(){
 		else{	// invalid packet
 			// do nothing
 		}
-		
+
+		//restart_rx_sync_capture();
+		clear_rx_idle_flag();
+		restart_rx_dma();	// TODO: only do this on invalid packet receive? (maybe)
+		start_receive();
     }
+
+	if(USART6->SR & USART_SR_TC){	// transmission complete
+		disable_tx();
+		USART6->SR &= ~USART_SR_TC_Msk;	// clear transmission complete flag
+	}
 	
 }
 
@@ -252,189 +362,122 @@ uint32_t communication::calculate_crc(uint32_t *data, uint8_t data_length){
 	return CRC->DR;
 }
 
-int8_t communication::interpret_rx_packet(){
+int8_t communication::verify_rx_packet(){
 	if(calculate_crc(rx.data_words, expected_rx_length-1) == rx.data_words[expected_rx_length-1]){	// verify CRC is correct
+		
+		if(rx.data_bytes[0] == 0xFF){	// broadcast address
+			return 1;	// broadcast mode
+		}
 		if(rx.data_bytes[0] == device_address){	// verify device address matches
 			//TODO: update registers
 			return 0;	// address match
-		}
-		if(rx.data_bytes[0] == 0xFF){	// broadcast address
-			return 1;	// broadcast mode
 		}
 	}
 	return -1;	// invalid packet
 }
 
-void communication::pack_8_to_8_array(uint8_t data_in, uint16_t &offset, uint8_t *array){
-	array[offset] = data_in;
-	offset++;
-}
-void communication::pack_8_to_8_array(int8_t data_in, uint16_t &offset, uint8_t *array){
-	array[offset] = reinterpret_cast<uint8_t&>(data_in);
-	offset++;
-}
-void communication::pack_16_to_8_array(uint16_t data_in, uint16_t &offset, uint8_t *array){
-	array[offset] = data_in & 0xFF;
-	array[offset+1] = (data_in >> 8) & 0xFF;
-	offset += 2;
-}
-void communication::pack_16_to_8_array(int16_t data_in, uint16_t &offset, uint8_t *array){
-	uint16_t u_data_in = reinterpret_cast<uint16_t&>(data_in);
-	array[offset] = u_data_in & 0xFF;
-	array[offset+1] = (u_data_in >> 8) & 0xFF;
-	offset += 2;
-}
-void communication::pack_32_to_8_array(uint32_t data_in, uint16_t &offset, uint8_t *array){
-	array[offset] = data_in & 0xFF;
-	array[offset+1] = (data_in >> 8) & 0xFF;
-	array[offset+2] = (data_in >> 16) & 0xFF;
-	array[offset+3] = (data_in >> 24) & 0xFF;
-	offset += 4;
-}
-void communication::pack_32_to_8_array(int32_t data_in, uint16_t &offset, uint8_t *array){
-	uint32_t u_data_in = reinterpret_cast<uint32_t&>(data_in);
-	array[offset] = u_data_in & 0xFF;
-	array[offset+1] = (u_data_in >> 8) & 0xFF;
-	array[offset+2] = (u_data_in >> 16) & 0xFF;
-	array[offset+3] = (u_data_in >> 24) & 0xFF;
-	offset += 4;
-}
-void communication::pack_float_to_8_array(float data_in, uint16_t &offset, uint8_t *array){
-	uint32_t u_data_in = reinterpret_cast<uint32_t&>(data_in);
-	array[offset] = u_data_in & 0xFF;
-	array[offset+1] = (u_data_in >> 8) & 0xFF;
-	array[offset+2] = (u_data_in >> 16) & 0xFF;
-	array[offset+3] = (u_data_in >> 24) & 0xFF;
-	offset += 4;
-}
+void communication::generate_tx_cyclic_data(){
+	// this is meant to be called BEFORE generate_tx_sequential_data
 
-uint8_t communication::get_register_size(uint16_t raw_address){
-	if(raw_address >= int8_t_register_rw_start && raw_address <= int8_t_register_w_end){
-		return 1;
-	}
+	tx.data_bytes[0] = device_address;	// set device address
 
-	else if(raw_address >= int16_t_register_rw_start && raw_address <= int16_t_register_w_end){
-		return 2;
-	}
-
-	else if(raw_address >= int32_t_register_rw_start && raw_address <= int32_t_register_w_end){
-		return 4;
-	}
+	uint16_t offset = 1 + 4 + 4;	// leave room for device address, sequential data control/address and response
 	
-	else if(raw_address >= uint8_t_register_rw_start && raw_address <= uint8_t_register_w_end){
-		return 1;
-	}
-
-	else if(raw_address >= uint16_t_register_rw_start && raw_address <= uint16_t_register_w_end){
-		return 2;
-	}
-	
-	else if(raw_address >= uint32_t_register_rw_start && raw_address <= uint32_t_register_w_end){
-		return 4;
-	}
-
-	else if(raw_address >= float_register_rw_start && raw_address <= float_register_w_end){
-		return 4;
-	}
-	
-	else{
-		return 0;
-	}
-}
-
-void communication::debug(){
-	//device_set_register(cyclic_read_address_0_register, static_cast<uint16_t>(current_measured_d_register));
-	//device_set_register(enable_cyclic_data_register, 1);
-	//device_set_register(current_measured_d_register, 1234);
-	generate_tx_packet();
-}
-
-void communication::generate_tx_packet(){
-	
-	if(device_get_register(enable_cyclic_data_register) != 0 && !cyclic_mode_enabled){
+	if(comm_vars->enable_cyclic_data){
 		
-		// setup cyclic mode
-		cyclic_read_count = 0;
-		cyclic_write_count = 0;
+		for(uint16_t i = CYCLIC_READ_ADDRESS_POINTER_START; i<CYCLIC_ADDRESS_COUNT+CYCLIC_READ_ADDRESS_POINTER_START; i++){
+			uint16_t data_address = *reinterpret_cast<uint16_t*>(comm_var_pointers[i]);
+			if(data_address >= VAR_COUNT){
+				break;	// invalid address, either end of list or address out of range
+			}
 
-		for(uint8_t i=0; i<CYCLIC_ADDRESS_COUNT; i++){
-			uint16_t read_address = device_get_register(static_cast<uint16_t_register_rw>(cyclic_read_address_0_register+i));
-			uint16_t write_address = device_get_register(static_cast<uint16_t_register_rw>(cyclic_write_address_0_register+i));
-			if(read_address != 0xFFFF){
-				cyclic_read_addresses[cyclic_read_count] = read_address;
-				cyclic_read_sizes[cyclic_read_count] = get_register_size(read_address);
-				cyclic_read_count++;
-			}
-			if(write_address != 0xFFFF){
-				cyclic_write_addresses[i] = write_address;
-				cyclic_write_sizes[cyclic_write_count] = get_register_size(write_address);
-				cyclic_write_count++;
-			}
+			uint8_t data_size = data_info[data_address] >> 4;
+			memcpy(&(tx.data_bytes[offset]), comm_var_pointers[data_address], data_size);
+			offset += data_size;
 		}
+
 		cyclic_mode_enabled = true;
 	}
+	else{
+		cyclic_mode_enabled = false;
+	}
 
-	packing_offset = 0;
-	// device address
-	pack_8_to_8_array(device_address, packing_offset, tx.data_bytes);
+	if(offset % 4 != 0){	// pack additional blank bytes to ensure packet is a multiple of 32bits
+		memset(&(tx.data_bytes[offset]), 0, 4 - (offset % 4));
+	}
+	
+	expected_tx_length = offset/4;	// set the number of 32 bit words to transfer
+}
 
-	// sequential data control/address and response
-	pack_32_to_8_array(sequential_register_address, packing_offset, tx.data_bytes);
-	pack_32_to_8_array(sequential_register_data_response, packing_offset, tx.data_bytes);
+void communication::generate_tx_sequential_data(){
+	// this is meant to be called AFTER generate_tx_cyclic_data, and must be inside of the communication rx handler
+	
+	memcpy(&(tx.data_bytes[1]), &sequential_register_control, 4);	// set sequential data control/address
+	memcpy(&(tx.data_bytes[5]), &sequential_register_data_response, 4);	// set sequential data response
 
-	// add cyclic data read packets
-	if(cyclic_mode_enabled){
-		for(int i=0; i<cyclic_read_count; i++){
-			uint32_t raw_value;
-			if(controller_get_register(cyclic_read_addresses[i], raw_value) == SUCCESS){
-				switch (cyclic_read_sizes[i]){
-					case 1:
-						pack_8_to_8_array(reinterpret_cast<uint8_t&>(raw_value), packing_offset, tx.data_bytes);
-						break;
+	tx.data_words[expected_tx_length-1] = calculate_crc(tx.data_words, expected_tx_length-1);
+}
 
-					case 2:
-						pack_16_to_8_array(reinterpret_cast<uint16_t&>(raw_value), packing_offset, tx.data_bytes);
-						break;
-
-					case 4:
-						pack_32_to_8_array(raw_value, packing_offset, tx.data_bytes);
-						break;
-				
-					default:
-						break;
-				}
-			}
-			else{
-				// we must still fill packet space even though the register address was invalid
-				error_reading_cyclic_address = true;
-				switch (cyclic_read_sizes[i]){
-					case 1:
-						pack_8_to_8_array(static_cast<uint8_t>(0), packing_offset, tx.data_bytes);
-						break;
-
-					case 2:
-						pack_16_to_8_array(static_cast<uint16_t>(0), packing_offset, tx.data_bytes);
-						break;
-
-					case 4:
-						pack_32_to_8_array(static_cast<uint32_t>(0), packing_offset, tx.data_bytes);
-						break;
-				
-					default:
-						break;
-				}
-			}
+void communication::interpret_rx_sequential_data(){
+	memcpy(&sequential_register_control, &(rx.data_bytes[1]), 4);	// get sequential data control/address
+	memcpy(&sequential_register_data_input, &(rx.data_bytes[5]), 4);	// get sequential data input
+	uint16_t raw_address = sequential_register_control & 0xFFFF;
+	if(sequential_register_control & (1 << 16)){	// bit 16 is the write flag
+		// attempt to write
+		if(controller_set_register(raw_address, &sequential_register_data_input) == controller_register_access_result::SUCCESS){
+			sequential_register_data_response = *reinterpret_cast<uint32_t*>(comm_var_pointers[raw_address]);	// success, return the value
+			sequential_register_control = sequential_register_control & ~(0xFF << 24);	// clear bits 24-31 (device response)
+			sequential_register_control |= 1 << 24;	// set bit 24 to indicate success
+		}
+		else{	// fail
+			sequential_register_data_response = 0;
+			sequential_register_control = sequential_register_control & ~(0xFF << 24);	// clear bits 24-31 (device response)
+			sequential_register_control |= 1 << 25;	// set bit 25 to indicate failure
+			logs->add(communication_messages::invalid_address);
 		}
 	}
+	else{
+		// attempt to read
+		if(controller_get_register(raw_address, &sequential_register_data_response) == controller_register_access_result::SUCCESS){
+			sequential_register_control = sequential_register_control & ~(0xFF << 24);	// clear bits 24-31 (device response)
+			sequential_register_control |= 1 << 24;	// set bit 24 to indicate success
+		}
+		else{	// fail
+			sequential_register_data_response = 0;
+			sequential_register_control = sequential_register_control & ~(0xFF << 24);	// clear bits 24-31 (device response)
+			sequential_register_control |= 1 << 25;	// set bit 25 to indicate failure
+			logs->add(communication_messages::invalid_address);
+		}
+	}
+}
 
-	while(packing_offset % 4 != 0){	// pack additional blank bytes to ensure packet is a multiple of 32bits
-		pack_8_to_8_array(static_cast<uint8_t>(0), packing_offset, tx.data_bytes);
+void communication::interpret_rx_cyclic_data(){
+	uint16_t offset = 1 + 4 + 4;	// start after device address, sequential data control/address and response
+	
+	if(!comm_vars->enable_cyclic_data){
+		return;	// cyclic data is disabled, do nothing
 	}
 
-	pack_32_to_8_array(calculate_crc(tx.data_words, packing_offset/4), packing_offset, tx.data_bytes);
+	bool error = false;
+	
+	for(uint16_t i = CYCLIC_WRITE_ADDRESS_POINTER_START; i<CYCLIC_ADDRESS_COUNT+CYCLIC_WRITE_ADDRESS_POINTER_START; i++){
+		uint16_t data_address = *reinterpret_cast<uint16_t*>(comm_var_pointers[i]);
+		if(data_address >= VAR_COUNT){
+			break;	// invalid address, either end of list or address out of range
+		}
 
-	if(expected_tx_length != packing_offset/4){
-		set_tx_packet_length(packing_offset/4);
+		if(controller_set_register(data_address, &(rx.data_bytes[offset])) == controller_register_access_result::SUCCESS){
+			// success
+		}
+		else{
+			error = true;
+		}
+		
+		offset += data_info[data_address] >> 4;
+	}
+
+	if(error){
+		logs->add(communication_messages::invalid_cyclic_config);
 	}
 }
 
@@ -455,270 +498,31 @@ void communication::restart_rx_dma(){
     \brief Clear RX IDLE detection flag
 */
 void communication::clear_rx_idle_flag(){
-	volatile uint32_t temp = USART6->SR;	// read SR register
+	[[maybe_unused]] volatile uint32_t temp = USART6->SR;	// read SR register
 	temp = USART6->DR;	// read DR register
 }
 
 
-communication::controller_register_access_result communication::controller_set_register(uint16_t raw_address, uint32_t &raw_value){
-	if(raw_address >= int8_t_register_rw_start && raw_address <= int8_t_register_rw_end){
-		device_set_register(static_cast<int8_t_register_rw>(raw_address), raw_value);
-	}
-	else if(raw_address >= int8_t_register_w_start && raw_address <= int8_t_register_w_end){
-		device_set_register(static_cast<int8_t_register_w>(raw_address), raw_value);
-	}
-
-	else if(raw_address >= int16_t_register_rw_start && raw_address <= int16_t_register_rw_end){
-		device_set_register(static_cast<int16_t_register_rw>(raw_address), raw_value);
-	}
-	else if(raw_address >= int16_t_register_w_start && raw_address <= int16_t_register_w_end){
-		device_set_register(static_cast<int16_t_register_w>(raw_address), raw_value);
-	}
-
-	else if(raw_address >= int32_t_register_rw_start && raw_address <= int32_t_register_rw_end){
-		device_set_register(static_cast<int32_t_register_rw>(raw_address), raw_value);
-	}
-	else if(raw_address >= int32_t_register_w_start && raw_address <= int32_t_register_w_end){
-		device_set_register(static_cast<int32_t_register_w>(raw_address), raw_value);
-	}
-
-	else if(raw_address >= uint8_t_register_rw_start && raw_address <= uint8_t_register_rw_end){
-		device_set_register(static_cast<uint8_t_register_rw>(raw_address), raw_value);
-	}
-	else if(raw_address >= uint8_t_register_w_start && raw_address <= uint8_t_register_w_end){
-		device_set_register(static_cast<uint8_t_register_w>(raw_address), raw_value);
-	}
-
-	else if(raw_address >= uint16_t_register_rw_start && raw_address <= uint16_t_register_rw_end){
-		device_set_register(static_cast<uint16_t_register_rw>(raw_address), raw_value);
-	}
-	else if(raw_address >= uint16_t_register_w_start && raw_address <= uint16_t_register_w_end){
-		device_set_register(static_cast<uint16_t_register_w>(raw_address), raw_value);
-	}
-
-	else if(raw_address >= uint32_t_register_rw_start && raw_address <= uint32_t_register_rw_end){
-		device_set_register(static_cast<uint32_t_register_rw>(raw_address), raw_value);
-	}
-	else if(raw_address >= uint32_t_register_w_start && raw_address <= uint32_t_register_w_end){
-		device_set_register(static_cast<uint32_t_register_w>(raw_address), raw_value);
-	}
-
-	else if(raw_address >= float_register_rw_start && raw_address <= float_register_rw_end){
-		device_set_register(static_cast<float_register_rw>(raw_address), raw_value);
-	}
-	else if(raw_address >= float_register_w_start && raw_address <= float_register_w_end){
-		device_set_register(static_cast<float_register_w>(raw_address), raw_value);
-	}
-
-	else{
+communication::controller_register_access_result communication::controller_set_register(uint16_t raw_address, void* raw_value){
+	if(raw_address >= VAR_COUNT){	// ouside of range
 		return controller_register_access_result::FAIL;
 	}
-
-	return controller_register_access_result::SUCCESS;
+	if(data_info[raw_address] & 0b10){	// write allowed
+		volatile uint32_t temp = *reinterpret_cast<uint32_t*>(raw_value);
+		volatile uint16_t* fan_spd_ptr = &comm_vars->fan_speed_cmd;
+		memcpy(comm_var_pointers[raw_address], raw_value, data_info[raw_address] >> 4);
+		return controller_register_access_result::SUCCESS;
+	}
+	return controller_register_access_result::FAIL;
 }
 
-communication::controller_register_access_result communication::controller_get_register(uint16_t raw_address, uint32_t &raw_value){
-	if(raw_address >= int8_t_register_rw_start && raw_address <= int8_t_register_rw_end){
-		raw_value = device_get_register(static_cast<int8_t_register_rw>(raw_address));
-	}
-	else if(raw_address >= int8_t_register_r_start && raw_address <= int8_t_register_r_end){
-		raw_value = device_get_register(static_cast<int8_t_register_r>(raw_address));
-	}
-
-	else if(raw_address >= int16_t_register_rw_start && raw_address <= int16_t_register_rw_end){
-		raw_value = device_get_register(static_cast<int16_t_register_rw>(raw_address));
-	}
-	else if(raw_address >= int16_t_register_r_start && raw_address <= int16_t_register_r_end){
-		raw_value = device_get_register(static_cast<int16_t_register_r>(raw_address));
-	}
-
-	else if(raw_address >= int32_t_register_rw_start && raw_address <= int32_t_register_rw_end){
-		raw_value = device_get_register(static_cast<int32_t_register_rw>(raw_address));
-	}
-	else if(raw_address >= int32_t_register_r_start && raw_address <= int32_t_register_r_end){
-		raw_value = device_get_register(static_cast<int32_t_register_r>(raw_address));
-	}
-
-	else if(raw_address >= uint8_t_register_rw_start && raw_address <= uint8_t_register_rw_end){
-		raw_value = device_get_register(static_cast<uint8_t_register_rw>(raw_address));
-	}
-	else if(raw_address >= uint8_t_register_r_start && raw_address <= uint8_t_register_r_end){
-		raw_value = device_get_register(static_cast<uint8_t_register_r>(raw_address));
-	}
-
-	else if(raw_address >= uint16_t_register_rw_start && raw_address <= uint16_t_register_rw_end){
-		raw_value = device_get_register(static_cast<uint16_t_register_rw>(raw_address));
-	}
-	else if(raw_address >= uint16_t_register_r_start && raw_address <= uint16_t_register_r_end){
-		raw_value = device_get_register(static_cast<uint16_t_register_r>(raw_address));
-	}
-
-	else if(raw_address >= uint32_t_register_rw_start && raw_address <= uint32_t_register_rw_end){
-		raw_value = device_get_register(static_cast<uint32_t_register_rw>(raw_address));
-	}
-	else if(raw_address >= uint32_t_register_r_start && raw_address <= uint32_t_register_r_end){
-		raw_value = device_get_register(static_cast<uint32_t_register_r>(raw_address));
-	}
-
-	else if(raw_address >= float_register_rw_start && raw_address <= float_register_rw_end){
-		raw_value = device_get_register(static_cast<float_register_rw>(raw_address));
-	}
-	else if(raw_address >= float_register_r_start && raw_address <= float_register_r_end){
-		raw_value = device_get_register(static_cast<float_register_r>(raw_address));
-	}
-
-	else{
+communication::controller_register_access_result communication::controller_get_register(uint16_t raw_address, void* raw_value){
+	if(raw_address >= VAR_COUNT){	// ouside of range
 		return controller_register_access_result::FAIL;
 	}
-
-	return controller_register_access_result::SUCCESS;
-}
-
-
-// int8 register get/sets
-int8_t communication::device_get_register(int8_t_register_rw address){
-	return int8_t_data_array[address - INT8_T_REGISTER_OFFSET];
-}
-int8_t communication::device_get_register(int8_t_register_r address){
-	return int8_t_data_array[address - INT8_T_REGISTER_OFFSET];
-}
-int8_t communication::device_get_register(int8_t_register_w address){
-	return int8_t_data_array[address - INT8_T_REGISTER_OFFSET];
-}
-
-void communication::device_set_register(int8_t_register_rw address, int8_t value){
-	int8_t_data_array[address - INT8_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(int8_t_register_r address, int8_t value){
-	int8_t_data_array[address - INT8_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(int8_t_register_w address, int8_t value){
-	int8_t_data_array[address - INT8_T_REGISTER_OFFSET] = value;
-}
-
-// int16 register get/sets
-int16_t communication::device_get_register(int16_t_register_rw address){
-	return int16_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-int16_t communication::device_get_register(int16_t_register_r address){
-	return int16_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-int16_t communication::device_get_register(int16_t_register_w address){
-	return int16_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-
-void communication::device_set_register(int16_t_register_rw address, int16_t value){
-	int16_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(int16_t_register_r address, int16_t value){
-	int16_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(int16_t_register_w address, int16_t value){
-	int16_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-
-// int32 register get/sets
-int32_t communication::device_get_register(int32_t_register_rw address){
-	return int32_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-int32_t communication::device_get_register(int32_t_register_r address){
-	return int32_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-int32_t communication::device_get_register(int32_t_register_w address){
-	return int32_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-
-void communication::device_set_register(int32_t_register_rw address, int32_t value){
-	int32_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(int32_t_register_r address, int32_t value){
-	int32_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(int32_t_register_w address, int32_t value){
-	int32_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-
-// uint8 register get/sets
-uint8_t communication::device_get_register(uint8_t_register_rw address){
-	return uint8_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-uint8_t communication::device_get_register(uint8_t_register_r address){
-	return uint8_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-uint8_t communication::device_get_register(uint8_t_register_w address){
-	return uint8_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-
-void communication::device_set_register(uint8_t_register_rw address, uint8_t value){
-	uint8_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(uint8_t_register_r address, uint8_t value){
-	uint8_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(uint8_t_register_w address, uint8_t value){
-	uint8_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-
-// uint16 register get/sets
-uint16_t communication::device_get_register(uint16_t_register_rw address){
-	return uint16_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-uint16_t communication::device_get_register(uint16_t_register_r address){
-	return uint16_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-uint16_t communication::device_get_register(uint16_t_register_w address){
-	return uint16_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-
-void communication::device_set_register(uint16_t_register_rw address, uint16_t value){
-	uint16_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(uint16_t_register_r address, uint16_t value){
-	uint16_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(uint16_t_register_w address, uint16_t value){
-	uint16_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-
-
-// uint32 register get/sets
-uint32_t communication::device_get_register(uint32_t_register_rw address){
-	return uint32_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-uint32_t communication::device_get_register(uint32_t_register_r address){
-	return uint32_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-uint32_t communication::device_get_register(uint32_t_register_w address){
-	return uint32_t_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-
-void communication::device_set_register(uint32_t_register_rw address, uint32_t value){
-	uint32_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(uint32_t_register_r address, uint32_t value){
-	uint32_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(uint32_t_register_w address, uint32_t value){
-	uint32_t_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-
-// int32 register get/sets
-float communication::device_get_register(float_register_rw address){
-	return float_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-float communication::device_get_register(float_register_r address){
-	return float_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-float communication::device_get_register(float_register_w address){
-	return float_data_array[address - INT16_T_REGISTER_OFFSET];
-}
-
-void communication::device_set_register(float_register_rw address, float value){
-	float_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(float_register_r address, float value){
-	float_data_array[address - INT16_T_REGISTER_OFFSET] = value;
-}
-void communication::device_set_register(float_register_w address, float value){
-	float_data_array[address - INT16_T_REGISTER_OFFSET] = value;
+	if(data_info[raw_address] & 0b01){	// read allowed
+		memcpy(raw_value, comm_var_pointers[raw_address], data_info[raw_address] >> 4);
+		return controller_register_access_result::SUCCESS;
+	}
+	return controller_register_access_result::FAIL;
 }

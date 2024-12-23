@@ -152,5 +152,8 @@
 			//         ]
 			// }
 		]
+	},
+	"settings": {
+		"cortex-debug.variableUseNaturalFormat": false
 	}
 }

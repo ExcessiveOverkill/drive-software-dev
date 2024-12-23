@@ -1,15 +1,24 @@
 #include "device.h"
 
+// extern device_struct vars;
+// extern void* var_pointers[86];
+
 device::device(){
+    comm_vars = &vars;
+    comm_var_pointers = var_pointers;
 }
 
 void device::init(){
     CPU_init();
-    timer_us_init();
     sysTick_init();
+ 
+    #ifdef RELEASE_MODE
+        watchdog_init();
+    #endif
 
     logs.init();
     // Initialize all the low level classes
+    Comm.init();
     Fans.init();
     UserIO.init();
     CurrentSense.init();
@@ -17,16 +26,33 @@ void device::init(){
     Adc.init();
     Sto.init();
 
+
+    micros = Comm.micros;
+    logs.microseconds = Comm.micros;
+    Comm.comm_vars = comm_vars;
+    Comm.comm_var_pointers = comm_var_pointers;
+
     // TODO: add watchdog timer to disable PWM if system is unresponsive
 
-    
     // short startup test
     //startup_demo();
 
+    // todo: get this from the controller
+    Comm.set_sync_frequency(1000); // 1kHz sync frequency
+    Comm.set_pwm_timer_sync_offset_us(0); // no offset
+
+    UserIO.set_led_state(0b1000, UserIO.blink_slow);    // signify device is on and running
+
+    delay_ms(500); // wait for userIO to update
+
     // wait until we have a valid communication address before initializing communication
     Comm.set_device_address(UserIO.get_switch_states());
-    Comm.init();
+    
+    delay_ms(500); // wait for communication to update
+    Comm.enable_resync = true; // enable resync
 
+    Sto.enable();
+    PhasePWM.enable();
     
 }
 
@@ -70,30 +96,10 @@ void device::CPU_init(){
 	SystemInit();	// Initialize system
 }
 
-void device::timer_us_init(){
-    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;		// Enable TIM2 Clock
-    __DSB();
-	TIM2->PSC = (SYSCLK*1e6 / 1e6) - 1; // Prescaler to count in microseconds
-    TIM2->EGR |= TIM_EGR_UG; // Generate an update event to update the prescaler
-	TIM2->ARR = 0xFFFFFFFF;  // Max auto-reload value (2^32 - 1)
-    TIM2->DIER |= TIM_DIER_UIE; // Enable update interrupt
-	TIM2->CR1 |= TIM_CR1_CEN; // Enable TIM2
-    NVIC_EnableIRQ(TIM2_IRQn); // Enable TIM2 interrupt
-    microseconds = 0; // Initialize the microseconds counter
-}
-
-uint64_t device::get_microseconds(){
-    microseconds &= 0xFFFFFFFF00000000; // Clear the lower 32 bits of the microseconds counter
-    microseconds |= (TIM2->CNT & 0xFFFFFFFF); // Add the current timer value to the microseconds counter
-    return microseconds;
-}
-
 void device::delay_us(uint32_t time_us){
-    volatile uint64_t time = TIM2->CNT;
-    uint64_t end_time = time + time_us;
-
-    while (time < end_time){    // Wait until the desired time has passed
-        time = TIM2->CNT; // Update the time
+    uint64_t end_time = Comm.get_microseconds() + time_us;
+    while (Comm.get_microseconds() < end_time){    // Wait until the desired time has passed
+        watchdog_reload();
     }
 }
 
@@ -106,7 +112,20 @@ void device::delay_ms(uint32_t time_ms){
 void device::sysTick_init(){
     SysTick->LOAD = ((SYSCLK*1e6) / SYSTICK_FREQUENCY) - 1; // Set the SysTick timer to count at the desired frequency
     NVIC_EnableIRQ(SysTick_IRQn); // Enable the SysTick interrupt
+    NVIC_SetPriority(USART6_IRQn, 6);
     SysTick->CTRL = 0b111;	// Enable counter, interrupt, and set clock source to system clock
+}
+
+void device::watchdog_init(){
+    IWDG->KR = 0x5555; // Enable write access to the IWDG_PR and IWDG_RLR registers
+    IWDG->PR = 0b000; // Set the prescaler to 4 (LSI at 32khz / 4)
+    IWDG->RLR = 8000 / 1000; // Set the reload value to 1ms
+    IWDG->KR = 0xAAAA; // Reload the watchdog timer
+    IWDG->KR = 0xCCCC; // Start the watchdog timer
+}
+
+void device::watchdog_reload(){
+    IWDG->KR = 0xAAAA; // Reload the watchdog timer
 }
 
 void device::startup_demo(){
@@ -132,7 +151,12 @@ void device::run(){
 void device::update(){
     // TODO: Add low frequency update code
 
+    volatile uint32_t speed = comm_vars->fan_speed_cmd;
+
+    Fans.set_speed(Fans.max_rpm*vars.fan_speed_cmd/0xffff);
+
     update_leds();
+    watchdog_reload();
 }
 
 void device::update_leds(){
@@ -143,7 +167,6 @@ void device::update_leds(){
     else{
         UserIO.set_led_state(0b0001, UserIO.blink_slow);
     }
-
 }
 
 void device::critical_shutdown(){
@@ -155,17 +178,15 @@ void device::critical_shutdown(){
 }
 
 void device::SysTick_Handler(void){
-    get_microseconds(); // Update the microseconds counter (must be called periodically to prevent rollover errors)
-    
     Fans.SysTick_Handler();
     UserIO.SysTick_Handler();
 
     update();
+    
 }
 
 void device::TIM2_IRQHandler(void){
-    TIM2->SR &= ~TIM_SR_UIF; // Clear the update interrupt flag
-    microseconds += 0x100000000; // Add 2^32 to the microseconds counter
+    Comm.TIM2_IRQHandler();
 }
 
 void device::I2C1_EV_IRQHandler(void){
@@ -185,11 +206,14 @@ void device::DMA2_Stream1_IRQHandler(void){
 }
 
 void device::TIM1_UP_TIM10_IRQHandler(void){
-    get_microseconds();
+    
     // TODO: Add TIM1_UP_TIM10_IRQHandler code
     if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
         TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
     }
+
+    Comm.update_timeout();
+    watchdog_reload();
 }
 
 void device::USART6_IRQHandler(void){

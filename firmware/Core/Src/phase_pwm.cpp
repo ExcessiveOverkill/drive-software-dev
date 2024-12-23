@@ -58,12 +58,14 @@ void phase_pwm::init(){
 	TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE; // Enable CH1 and CH1N
 
 	TIM1->DIER |= TIM_DIER_UIE; // Enable Update Interrupt
+
+	//TIM1->SMCR |= 0b001 << TIM_SMCR_TS_Pos;		// use internal trigger ITR0 which is from TIM2 (our main us timer)
+	//TIM1->SMCR |= 0b100 << TIM_SMCR_SMS_Pos;	// set to reset mode, this will allow the timer to be reset by the main timer for synchronization
 	
 	NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
 	// NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 1); // TODO: Set priority as needed
 
     TIM1->CR1 |= TIM_CR1_CEN;		// Enable counting (this does not enable main outputs yet)
-
 }
 
 
@@ -76,7 +78,7 @@ void phase_pwm::enable(){
 	TIM1->CCR2 = PWM_ticks * 0.5;
 	TIM1->CCR3 = PWM_ticks * 0.5;
 
-	TIM1->CNT = 0;					// Reset PWM counter
+	//TIM1->CNT = 0;					// Reset PWM counter
     TIM1->SR &= ~TIM_SR_BIF;     // Clear break input flag
 	TIM1->BDTR |= TIM_BDTR_MOE;     // Main output enable
 }

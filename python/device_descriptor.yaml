@@ -41,6 +41,22 @@ messages:
       description: "Measured phase current was too high for the drivers"
       severity: "critical"
 
+  communication:
+    timeout:
+      readable_name: "Timeout"
+      description: "No valid packets received within the timeout period"
+      severity: "error"
+
+    invalid_address:
+      readable_name: "Invalid address"
+      description: "read/write attempted on an address that either doesn't exist, or has incompatible permissions"
+      severity: "warning"
+
+    invalid_cyclic_config:
+      readable_name: "Invalic cyclic config"
+      description: "Attempted to configure a cyclic value that either doesn't exist, or has incompatible permissions"
+      severity: warning
+
 
 
 
@@ -219,6 +235,22 @@ hard_parameters:
 registers:
 # values meant to be read/written by the controller to configure and use the device
 
+  fan_speed_cmd:
+    value: 0
+    var_type: "uint16_t"
+    unit: ""
+    readable_name: "Fan speed"
+    description: "Fan speed in max rpm/0xffff"
+    permissions: "read/write"
+
+  fan_speed_measured:
+    value: 0
+    var_type: "uint16_t"
+    unit: ""
+    readable_name: "Measured fan speed"
+    description: "Measured fan speed in max rpm/0xffff"
+    permissions: "read"
+
   current_command_q:
     value: 0
     var_type: "int32_t"
@@ -304,7 +336,7 @@ registers:
     var_type: "uint8_t"
     unit: ""
     readable_name: "Requested drive state"
-    description: "FAULT: 1\nIDLE: 2\nRUN: 3"
+    description: "FAULT: 1, IDLE: 2, RUN: 3"
     permissions: "read/write"
 
 
