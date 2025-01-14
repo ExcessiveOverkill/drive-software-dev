@@ -14,7 +14,8 @@
 #include "device_descriptor.h"
 #include "logging.h"
 
-#define DFSDM_FOSR (1000*ADCCLK/PWMCLK/2 - 2)
+//#define DFSDM_FOSR (1000*ADCCLK/PWMCLK/2 - 2) // TODO: figure out why this is producing sample times too long
+#define DFSDM_FOSR 130 // just under 1 update period at 25khz PWM frequency
 #define SHUNT_RESISTANCE 0.005	// (Ohms) Current shunt resistance
 
 // Class for managing DFSDM hardware
@@ -48,7 +49,4 @@ class current_sense_interface{
         uint32_t short_circuit_detected();
 
         void clear_short_circuit_detected();
-
-        //uint32_t get_errors(void);
-
 };

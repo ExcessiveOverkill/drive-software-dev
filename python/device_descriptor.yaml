@@ -12,6 +12,7 @@ firmware:
 
 
 message_severities:
+  none: 0
   info: 1
   warning: 2
   error: 3
@@ -39,7 +40,12 @@ messages:
     overcurrent:
       readable_name: "Overcurrent"
       description: "Measured phase current was too high for the drivers"
-      severity: "critical"
+      severity: "error"
+
+    imbalance:
+      readable_name: "Current imbalance"
+      description: "Detected leakage current was too high"
+      severity: "error"
 
   communication:
     timeout:
@@ -55,8 +61,57 @@ messages:
     invalid_cyclic_config:
       readable_name: "Invalic cyclic config"
       description: "Attempted to configure a cyclic value that either doesn't exist, or has incompatible permissions"
-      severity: warning
+      severity: "warning"
 
+  system:
+    overtemp:
+      readable_name: "Overtemp"
+      description: "Measured temperature was too high"
+      severity: "error"
+
+    overvoltage:
+      readable_name: "Overvoltage"
+      description: "Measured DC bus voltage was too high"
+      severity: "critical"
+
+    floating_voltage_too_high:
+      readable_name: "Floating voltage too high"
+      description: "Measured voltage on the output phases while off was too high"
+      severity: "critical"
+
+  phase_pwm:
+    voltage_saturation:
+      readable_name: "Voltage saturation"
+      description: "PWM output voltage was saturated, unable to reach commanded voltage"
+      severity: "warning"
+
+
+  sto:
+    sto_active:
+      readable_name: "STO active"
+      description: "Safe torque off is active"
+      severity: "critical"
+
+    sto_fault_matching_channels:
+      readable_name: "Channels do not match"
+      description: "STO channel feedback shows channels do not match, this usually indicates a wiring or hardware fault"
+      severity: "critical"
+
+    sto_hardware_fault:
+      readable_name: "Hardware fault"
+      description: "STO internal hardware fault detected, feedback channels active when disabled"
+      severity: "critical"
+
+  RL_calib_mode:
+    inductance_calib_fail:
+      readable_name: "Inductance calibration failed"
+      description: "Inductance calibration failed, current did not fall within expected range"
+      severity: "error"
+
+    resistance_calib_fail:
+      readable_name: "Resistance calibration failed"
+      description: "Resistance calibration failed, unable to reach calibration current"
+      severity: "error"
 
 
 
@@ -132,6 +187,14 @@ hard_parameters:
     readable_name: "Max allowed phase current"
     description: "Maximum current allowed through an output phase before overcurrent protection is tripped."
 
+  max_imbalance_current:
+    value: 500
+    var_type: "uint16_t"
+    unit: "milliamps"
+    readable_name: "Max allowed phase current imbalance"
+    description: "Maximum difference allowed between phase currents before overcurrent protection is tripped."
+
+
   heatsink_over_temp_limit:
     value: 50
     var_type: "uint8_t"
@@ -161,7 +224,7 @@ hard_parameters:
     description: "System tick frequency, do not set above 1khz"
 
   deadtime:
-    value: 100
+    value: 80
     var_type: "uint32_t"
     unit: "ns"
     readable_name: "Phase PWM deadtime"

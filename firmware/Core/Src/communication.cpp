@@ -94,9 +94,10 @@ void communication::init(){
 
     NVIC_EnableIRQ(DMA2_Stream1_IRQn);  // Configure NVIC for DMA RX Interrupt	TODO: make sure this priority is lower than the PWM update IRQ
 	//NVIC_EnableIRQ(DMA2_Stream6_IRQn);  // Configure NVIC for DMA TX Interrupt
-	NVIC_SetPriority(DMA2_Stream1_IRQn, 4);
+	NVIC_SetPriority(DMA2_Stream1_IRQn, 5);
+	NVIC_SetPriority(USART6_IRQn, 2);
 	NVIC_EnableIRQ(USART6_IRQn);	// Enable USART6 interrupts
-	NVIC_SetPriority(USART6_IRQn, 3);
+	
 
     DMA2_Stream1->CR |= DMA_SxCR_EN; // Enable DMA RX stream
 	//DMA2_Stream6->CR |= DMA_SxCR_EN; // Enable DMA TX stream
@@ -112,7 +113,13 @@ bool communication::is_ok(){
 }
 
 void communication::update_timeout(){
-	if(get_microseconds() - last_valid_packet_time_us > timeout_limit_us){
+	// needs to be signed because the comm interrupt could fire part way through this function and result in a negative diff
+	int64_t diff = get_microseconds() - last_valid_packet_time_us;
+	if(diff > timeout_limit_us){
+		if(!timed_out){
+			//logs->add_log("Communication timeout", message_severities::warning);	// TODO: add a log message
+			reset_communication();	// reset configs so the device is in a known state for reconnection
+		}
 		timed_out = true;
 	}
 }
@@ -140,6 +147,7 @@ void communication::timer_us_init(){
 
 
 	TIM2->CR1 |= TIM_CR1_CEN; // Enable TIM2
+	NVIC_SetPriority(TIM2_IRQn, 14); // Set TIM2 interrupt priority to low
     NVIC_EnableIRQ(TIM2_IRQn); // Enable TIM2 interrupt
     microseconds = 0; // Initialize the microseconds counter
 }
@@ -193,13 +201,15 @@ void communication::resync_system(){
 }
 
 void communication::TIM2_IRQHandler(){
-	TIM2->SR &= ~TIM_SR_UIF; // Clear the update interrupt flag
-    microseconds += 0x100000000; // Add 2^32 to the microseconds counter
+	us_overflow = true;
 }
 
 uint64_t communication::get_microseconds(){
-    microseconds &= 0xFFFFFFFF00000000; // Clear the lower 32 bits of the microseconds counter
-    microseconds |= (TIM2->CNT & 0xFFFFFFFF); // Add the current timer value to the microseconds counter
+	volatile uint64_t us_temp = microseconds & 0xFFFFFFFF00000000; // Clear the lower 32 bits of the microseconds counter
+	us_temp = us_overflow ? us_temp + 0x100000000 : us_temp;	// Add 2^32 to the microseconds counter if there was an overflow
+	us_overflow = false; // Clear the overflow flag
+	us_temp += (TIM2->CNT & 0xFFFFFFFF); // Add the current timer value to the microseconds counter
+    microseconds = us_temp; // copy to global variable
     return microseconds;
 }
 
@@ -329,10 +339,11 @@ void communication::usart6_interrupt_handler(){
 			// cyclic data can be interpreted outside of the rx handler
 
 			// start TX transmission
-			//generate_tx_cyclic_data();
+			generate_tx_cyclic_data();
 			generate_tx_sequential_data();
 			start_transmit();
 			reset_timeout();
+			interpret_rx_cyclic_data();
 		}
 		else if(result == 1){	// broadcast packet
 			reset_timeout();
@@ -396,17 +407,25 @@ void communication::generate_tx_cyclic_data(){
 			offset += data_size;
 		}
 
-		cyclic_mode_enabled = true;
+		if(!cyclic_mode_enabled){
+			//calculate_rx_expected_size();
+			cyclic_mode_enabled = true;
+		}
 	}
 	else{
-		cyclic_mode_enabled = false;
+		if(cyclic_mode_enabled){
+			//calculate_rx_expected_size();
+			cyclic_mode_enabled = false;
+		}
 	}
 
 	if(offset % 4 != 0){	// pack additional blank bytes to ensure packet is a multiple of 32bits
 		memset(&(tx.data_bytes[offset]), 0, 4 - (offset % 4));
+		offset += 4 - (offset % 4);
 	}
 	
 	expected_tx_length = offset/4;	// set the number of 32 bit words to transfer
+	expected_tx_length++;	// add 1 for the CRC
 }
 
 void communication::generate_tx_sequential_data(){
@@ -424,13 +443,13 @@ void communication::interpret_rx_sequential_data(){
 	uint16_t raw_address = sequential_register_control & 0xFFFF;
 	if(sequential_register_control & (1 << 16)){	// bit 16 is the write flag
 		// attempt to write
-		if(controller_set_register(raw_address, &sequential_register_data_input) == controller_register_access_result::SUCCESS){
-			sequential_register_data_response = *reinterpret_cast<uint32_t*>(comm_var_pointers[raw_address]);	// success, return the value
+		if(controller_set_register(raw_address, &sequential_register_data_input, &sequential_register_data_response) == controller_register_access_result::SUCCESS){
+			//sequential_register_data_response = *reinterpret_cast<uint32_t*>(comm_var_pointers[raw_address]);	// success, return the value
 			sequential_register_control = sequential_register_control & ~(0xFF << 24);	// clear bits 24-31 (device response)
 			sequential_register_control |= 1 << 24;	// set bit 24 to indicate success
 		}
 		else{	// fail
-			sequential_register_data_response = 0;
+			//sequential_register_data_response = 0;
 			sequential_register_control = sequential_register_control & ~(0xFF << 24);	// clear bits 24-31 (device response)
 			sequential_register_control |= 1 << 25;	// set bit 25 to indicate failure
 			logs->add(communication_messages::invalid_address);
@@ -449,6 +468,16 @@ void communication::interpret_rx_sequential_data(){
 			logs->add(communication_messages::invalid_address);
 		}
 	}
+
+	if(comm_vars->enable_cyclic_data && !cyclic_mode_enabled){
+		calculate_rx_expected_size();
+	}
+	else if (!comm_vars->enable_cyclic_data && cyclic_mode_enabled)
+	{
+		calculate_rx_expected_size();
+	}
+	
+
 }
 
 void communication::interpret_rx_cyclic_data(){
@@ -481,6 +510,33 @@ void communication::interpret_rx_cyclic_data(){
 	}
 }
 
+void communication::calculate_rx_expected_size(){
+	uint16_t offset = 1 + 4 + 4;	// start after device address, sequential data control/address and response
+
+	for(uint16_t i = CYCLIC_WRITE_ADDRESS_POINTER_START; i<CYCLIC_ADDRESS_COUNT+CYCLIC_WRITE_ADDRESS_POINTER_START; i++){
+
+		if(!comm_vars->enable_cyclic_data){
+			break;
+		}
+
+		uint16_t data_address = *reinterpret_cast<uint16_t*>(comm_var_pointers[i]);
+		if(data_address >= VAR_COUNT){
+			break;	// invalid address, either end of list or address out of range
+		}		
+		offset += data_info[data_address] >> 4;
+	}
+
+	if(offset % 4 != 0){	// pack additional blank bytes to ensure packet is a multiple of 32bits
+		offset += 4 - (offset % 4);
+	}
+	
+	offset /= 4;	// convert to the number of 32 bit words to transfer
+	offset++;	// add 1 for the CRC
+
+	set_rx_packet_length(offset);
+
+}
+
 /*!
     \brief Restart RX dma to re-sync with next data packet
 */
@@ -503,14 +559,45 @@ void communication::clear_rx_idle_flag(){
 }
 
 
+/*!
+	\brief Reset cyclic data and disable cyclic mode
+*/
+void communication::reset_communication(){
+
+	cyclic_mode_enabled = false;
+	comm_vars->enable_cyclic_data = false;
+	for(uint16_t i = CYCLIC_READ_ADDRESS_POINTER_START; i<CYCLIC_ADDRESS_COUNT+CYCLIC_READ_ADDRESS_POINTER_START; i++){
+		*reinterpret_cast<uint16_t*>(comm_var_pointers[i]) = 65535;	// set to invalid address (not configured)
+	}
+	for(uint16_t i = CYCLIC_WRITE_ADDRESS_POINTER_START; i<CYCLIC_ADDRESS_COUNT+CYCLIC_WRITE_ADDRESS_POINTER_START; i++){
+		*reinterpret_cast<uint16_t*>(comm_var_pointers[i]) = 65535;	// set to invalid address (not configured)
+	}
+	calculate_rx_expected_size();
+}
+
+
 communication::controller_register_access_result communication::controller_set_register(uint16_t raw_address, void* raw_value){
 	if(raw_address >= VAR_COUNT){	// ouside of range
 		return controller_register_access_result::FAIL;
 	}
 	if(data_info[raw_address] & 0b10){	// write allowed
-		volatile uint32_t temp = *reinterpret_cast<uint32_t*>(raw_value);
-		volatile uint16_t* fan_spd_ptr = &comm_vars->fan_speed_cmd;
 		memcpy(comm_var_pointers[raw_address], raw_value, data_info[raw_address] >> 4);
+		return controller_register_access_result::SUCCESS;
+	}
+	return controller_register_access_result::FAIL;
+}
+
+communication::controller_register_access_result communication::controller_set_register(uint16_t raw_address, void* raw_value, void* response){
+	if(raw_address >= VAR_COUNT){	// ouside of range
+		return controller_register_access_result::FAIL;
+	}
+	if(data_info[raw_address] & 0b10){	// write allowed
+		memcpy(comm_var_pointers[raw_address], raw_value, data_info[raw_address] >> 4);
+
+		// also copy to response
+		memset(response, 0, 4);	// clear response
+		memcpy(response, comm_var_pointers[raw_address], data_info[raw_address] >> 4);
+
 		return controller_register_access_result::SUCCESS;
 	}
 	return controller_register_access_result::FAIL;

@@ -5,6 +5,10 @@ phase_pwm::phase_pwm(logging* logs){
 	this->logs = logs;
 }
 
+void phase_pwm::release_mode(){
+	release = true;
+}
+
 
 /*!
     \brief Initialize hardware
@@ -47,23 +51,27 @@ void phase_pwm::init(){
 
 	TIM1->CR1 |= TIM_CR1_CMS;     	// Set center-aligned mode
 	TIM1->CR1 |= TIM_CR1_ARPE;		// Enable Auto-reload preload
-	TIM1->ARR = 500*SYSCLK/PWMCLK;  // Auto-reload value for PWM frequency
+	TIM1->ARR = 500*SYSCLK/PWMCLK;  // Auto-reload value for PWM frequency (counter updates at 2x PWM frequency since we are in center-aligned mode)
 
 	TIM1->CCMR1 |= TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_2; // PWM mode 1 on Channel 1
 	TIM1->CCMR1 |= TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2; // PWM mode 1 on Channel 2
 	TIM1->CCMR2 |= TIM_CCMR2_OC3M_1 | TIM_CCMR2_OC3M_2; // PWM mode 1 on Channel 3
 
-	TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC1NE; // Enable CH1 and CH1N
-	TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC2NE; // Enable CH1 and CH1N
-	TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE; // Enable CH1 and CH1N
+	if(release){	// only enable outputs if we are in release mode
+		TIM1->CCER |= TIM_CCER_CC1E | TIM_CCER_CC1NE; // Enable CH1 and CH1N
+		TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC2NE; // Enable CH1 and CH1N
+		TIM1->CCER |= TIM_CCER_CC3E | TIM_CCER_CC3NE; // Enable CH1 and CH1N
+	}
 
-	TIM1->DIER |= TIM_DIER_UIE; // Enable Update Interrupt
+	TIM1->CR2 |= 0b010 << TIM_CR2_MMS_Pos; 	// set TRGO output to update, this will trigger on every update event (used by DFSDM)
+
+	TIM1->DIER |= TIM_DIER_UIE; // Enable Update Interrupt (called each time the counter changes direction (2x PWM frequency))
 
 	//TIM1->SMCR |= 0b001 << TIM_SMCR_TS_Pos;		// use internal trigger ITR0 which is from TIM2 (our main us timer)
 	//TIM1->SMCR |= 0b100 << TIM_SMCR_SMS_Pos;	// set to reset mode, this will allow the timer to be reset by the main timer for synchronization
 	
+	NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 3); // right below communication tx priority
 	NVIC_EnableIRQ(TIM1_UP_TIM10_IRQn);
-	// NVIC_SetPriority(TIM1_UP_TIM10_IRQn, 1); // TODO: Set priority as needed
 
     TIM1->CR1 |= TIM_CR1_CEN;		// Enable counting (this does not enable main outputs yet)
 }
@@ -74,13 +82,21 @@ void phase_pwm::init(){
 */
 void phase_pwm::enable(){
     // Set all channels to 50% by default
-	TIM1->CCR1 = PWM_ticks * 0.5;
-	TIM1->CCR2 = PWM_ticks * 0.5;
-	TIM1->CCR3 = PWM_ticks * 0.5;
+	// TIM1->CCR1 = PWM_ticks * 0.5;
+	// TIM1->CCR2 = PWM_ticks * 0.5;
+	// TIM1->CCR3 = PWM_ticks * 0.5;
 
 	//TIM1->CNT = 0;					// Reset PWM counter
-    TIM1->SR &= ~TIM_SR_BIF;     // Clear break input flag
+    clear_break_flag();     // Clear break input flag
 	TIM1->BDTR |= TIM_BDTR_MOE;     // Main output enable
+}
+
+
+bool phase_pwm::is_enabled(){
+	if((TIM1->BDTR & TIM_BDTR_MOE) != 0 && !break_flag_triggered()){
+		return true;
+	}
+	return false;
 }
 
 
@@ -113,8 +129,47 @@ void phase_pwm::clear_break_flag(){
 
     \note these are not verified in any way, make sure they are in range!
 */
-void phase_pwm::set(uint32_t U, uint32_t V, uint32_t W){
+void phase_pwm::set_raw(uint32_t U, uint32_t V, uint32_t W){
     TIM1->CCR1 = U;
     TIM1->CCR2 = V;
     TIM1->CCR3 = W;
+}
+
+void phase_pwm::set_voltage(float U, float V, float W, float dc_bus_voltage){
+	dc_bus_voltage /= 2;	// this is half since max voltage one ch can create is half the bus voltage (relative to the others set at 0v)
+	int32_t U_ticks = PWM_ticks/2 * (U / dc_bus_voltage) + PWM_ticks/2;
+	int32_t V_ticks = PWM_ticks/2 * (V / dc_bus_voltage) + PWM_ticks/2;
+	int32_t W_ticks = PWM_ticks/2 * (W / dc_bus_voltage) + PWM_ticks/2;
+
+	U_ticks = U_ticks > max_pwm_ticks ? max_pwm_ticks : U_ticks;
+	V_ticks = V_ticks > max_pwm_ticks ? max_pwm_ticks : V_ticks;
+	W_ticks = W_ticks > max_pwm_ticks ? max_pwm_ticks : W_ticks;
+
+	U_ticks = U_ticks < min_pwm_ticks ? min_pwm_ticks : U_ticks;
+	V_ticks = V_ticks < min_pwm_ticks ? min_pwm_ticks : V_ticks;
+	W_ticks = W_ticks < min_pwm_ticks ? min_pwm_ticks : W_ticks;
+
+	if(U_ticks == max_pwm_ticks || V_ticks == max_pwm_ticks || W_ticks == max_pwm_ticks || U_ticks == min_pwm_ticks || V_ticks == min_pwm_ticks || W_ticks == min_pwm_ticks){
+		logs->add(phase_pwm_messages::voltage_saturation);
+	}
+
+	set_raw(U_ticks, V_ticks, W_ticks);
+}
+
+void phase_pwm::set_percentange(float U, float V, float W){
+	// 1.0 is 100% (limited by max_duty_cycle)
+	
+	int32_t U_ticks = PWM_ticks/2 * U + PWM_ticks/2;
+	int32_t V_ticks = PWM_ticks/2 * V + PWM_ticks/2;
+	int32_t W_ticks = PWM_ticks/2 * W + PWM_ticks/2;
+
+	U_ticks = U_ticks > max_pwm_ticks ? max_pwm_ticks : U_ticks;
+	V_ticks = V_ticks > max_pwm_ticks ? max_pwm_ticks : V_ticks;
+	W_ticks = W_ticks > max_pwm_ticks ? max_pwm_ticks : W_ticks;
+
+	U_ticks = U_ticks < min_pwm_ticks ? min_pwm_ticks : U_ticks;
+	V_ticks = V_ticks < min_pwm_ticks ? min_pwm_ticks : V_ticks;
+	W_ticks = W_ticks < min_pwm_ticks ? min_pwm_ticks : W_ticks;
+
+	set_raw(U_ticks, V_ticks, W_ticks);
 }

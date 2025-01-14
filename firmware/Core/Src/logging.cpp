@@ -1,5 +1,6 @@
 #include "logging.h"
 #include <memory.h>
+#include <math.h>
 
 void logging::init(){
     // reset times
@@ -32,7 +33,10 @@ void logging::clear_all(void){
 
 message_severities logging::add(uint32_t  id){
     last_active_error_times_micros[uint32_t(id)] = *microseconds;  // update error time
-    active_severity = message_severities(values[id] >> 28);   // update active severity
+    message_severities new_severity = message_severities(values[id] >> 28);
+    if(new_severity > active_severity){
+        active_severity = new_severity;
+    }
     
     return active_severity;
 }

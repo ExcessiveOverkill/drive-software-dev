@@ -35,9 +35,13 @@ void current_sense_interface::init(){
 	DFSDM2_Channel2->CHCFGR1 |= (1 << DFSDM_CHCFGR1_SPICKSEL_Pos);	// Set channel 2 clock source CKOUT
 	DFSDM2_Channel3->CHCFGR1 |= (1 << DFSDM_CHCFGR1_SPICKSEL_Pos);	// Set channel 3 clock source CKOUT
 
-	DFSDM2_Filter1->FLTCR1 |= (1 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 1 to channel 1
-	DFSDM2_Filter2->FLTCR1 |= (2 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 2 to channel 2
-	DFSDM2_Filter3->FLTCR1 |= (3 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 3 to channel 3
+	// DFSDM2_Filter1->FLTCR1 |= (1 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 1 to channel 1
+	// DFSDM2_Filter2->FLTCR1 |= (2 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 2 to channel 2
+	// DFSDM2_Filter3->FLTCR1 |= (3 << DFSDM_FLTCR1_RCH_Pos);	// Set filter 3 to channel 3
+
+    DFSDM2_Filter1->FLTJCHGR = 0b1 << 1;	// Set filter 1 to channel 1
+    DFSDM2_Filter2->FLTJCHGR = 0b1 << 2;	// Set filter 2 to channel 2
+    DFSDM2_Filter3->FLTJCHGR = 0b1 << 3;	// Set filter 3 to channel 3
 
 	DFSDM2_Filter1->FLTFCR |= (3 << DFSDM_FLTFCR_FORD_Pos);	// Set Filter 1 to Sinc^3
 	DFSDM2_Filter2->FLTFCR |= (3 << DFSDM_FLTFCR_FORD_Pos);	// Set Filter 2 to Sinc^3
@@ -51,6 +55,17 @@ void current_sense_interface::init(){
 	DFSDM2_Channel2->CHCFGR2 |= 8 << DFSDM_CHCFGR2_DTRBS_Pos; 	// Right-shift data by 8 to fit 32bit into 24bit
 	DFSDM2_Channel3->CHCFGR2 |= 8 << DFSDM_CHCFGR2_DTRBS_Pos; 	// Right-shift data by 8 to fit 32bit into 24bit
 
+    // DFSDM2_Filter1->FLTCR1 |= DFSDM_FLTCR1_RSYNC;	// Sync with filter 0
+    // DFSDM2_Filter2->FLTCR1 |= DFSDM_FLTCR1_RSYNC;	// Sync with filter 0
+    // DFSDM2_Filter3->FLTCR1 |= DFSDM_FLTCR1_RSYNC;	// Sync with filter 0
+
+    DFSDM2_Filter1->FLTCR1 |= 0x0 << DFSDM_FLTCR1_JEXTSEL_Pos;    // Use TIM1_TRGO3 as the trigger
+    DFSDM2_Filter2->FLTCR1 |= 0x0 << DFSDM_FLTCR1_JEXTSEL_Pos;    // Use TIM1_TRGO3 as the trigger
+    DFSDM2_Filter3->FLTCR1 |= 0x0 << DFSDM_FLTCR1_JEXTSEL_Pos;    // Use TIM1_TRGO3 as the trigger
+
+    DFSDM2_Filter1->FLTCR1 |= 0b01 << DFSDM_FLTCR1_JEXTEN_Pos;    // Rising edge trigger
+    DFSDM2_Filter2->FLTCR1 |= 0b01 << DFSDM_FLTCR1_JEXTEN_Pos;    // Rising edge trigger
+    DFSDM2_Filter3->FLTCR1 |= 0b01 << DFSDM_FLTCR1_JEXTEN_Pos;    // Rising edge trigger
 
     // Set short circuit detection threshold
     DFSDM2_Channel1->CHAWSCDR |= DFSDM_SHORT_CIRCUIT_BIT_COUNT << DFSDM_CHAWSCDR_SCDT_Pos;
@@ -61,6 +76,8 @@ void current_sense_interface::init(){
     DFSDM2_Channel1->CHAWSCDR |= 0b1 << DFSDM_CHAWSCDR_BKSCD_Pos;
     DFSDM2_Channel2->CHAWSCDR |= 0b1 << DFSDM_CHAWSCDR_BKSCD_Pos;
     DFSDM2_Channel3->CHAWSCDR |= 0b1 << DFSDM_CHAWSCDR_BKSCD_Pos;
+
+    // TODO: set analog watchdog thresholds
 
 	DFSDM2_Channel1->CHCFGR1 |= DFSDM_CHCFGR1_CHEN; 	// Enable Channel 1
 	DFSDM2_Channel2->CHCFGR1 |= DFSDM_CHCFGR1_CHEN; 	// Enable Channel 2
@@ -85,7 +102,7 @@ void current_sense_interface::enable_short_circuit_detection(){
 
 
 /*!
-    \brief Disnable short circuit detection to immediately disable PWM output
+    \brief Disable short circuit detection to immediately disable PWM output
 */
 void current_sense_interface::disable_short_circuit_detection(){
     // Disable short circuit detection
@@ -103,7 +120,8 @@ void current_sense_interface::disable_short_circuit_detection(){
 uint32_t current_sense_interface::get_currents(){
 
     //  check if conversions are all done
-    if(!(DFSDM2_Filter1->FLTISR & DFSDM_FLTISR_REOCF) || !(DFSDM2_Filter2->FLTISR & DFSDM_FLTISR_REOCF) || !(DFSDM2_Filter3->FLTISR & DFSDM_FLTISR_REOCF)){
+    //if(!(DFSDM2_Filter1->FLTISR & DFSDM_FLTISR_REOCF) || !(DFSDM2_Filter2->FLTISR & DFSDM_FLTISR_REOCF) || !(DFSDM2_Filter3->FLTISR & DFSDM_FLTISR_REOCF)){
+    if(!(DFSDM2_Filter1->FLTISR & DFSDM_FLTISR_JEOCF) || !(DFSDM2_Filter2->FLTISR & DFSDM_FLTISR_JEOCF) || !(DFSDM2_Filter3->FLTISR & DFSDM_FLTISR_JEOCF)){   // check if DFSDM conversions are complete
         incomplete_conversion_count++;
         return 1;
     }
@@ -112,9 +130,13 @@ uint32_t current_sense_interface::get_currents(){
     // get conversion data from DFSDM
     // TODO: verify conversion divisor
     // TODO: consider shifting a more optimal number of bits to get higher resolution
-    phase_U_milliamps = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
-    phase_V_milliamps = ((int32_t)(DFSDM2_Filter2->FLTRDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
-    phase_W_milliamps = ((int32_t)(DFSDM2_Filter3->FLTRDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
+    // phase_U_milliamps = ((int32_t)(DFSDM2_Filter1->FLTRDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
+    // phase_V_milliamps = ((int32_t)(DFSDM2_Filter2->FLTRDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
+    // phase_W_milliamps = ((int32_t)(DFSDM2_Filter3->FLTRDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
+
+    phase_U_milliamps = ((int32_t)(DFSDM2_Filter1->FLTJDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
+    phase_V_milliamps = ((int32_t)(DFSDM2_Filter2->FLTJDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
+    phase_W_milliamps = ((int32_t)(DFSDM2_Filter3->FLTJDATAR & 0xFFFFFF00)) / conversion_divisor_milliamps;
 
     return 0;
 

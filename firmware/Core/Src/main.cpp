@@ -4,6 +4,7 @@ device* Device = nullptr;
 #include "interrupt_catch.h"
 
 int main(void){
+
 	device dev = device();
 	Device = &dev;
 

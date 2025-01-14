@@ -3,12 +3,17 @@
 
 #include "stm32f413xx.h"
 
-#include "mode_base.h"
+#include "default_mode.h"
 // other modes should be included here
+#include "resistance_calib_mode.h"
+#include "dc_voltage_mode.h"
+#include "dc_current_mode.h"
+#include "foc_current_mode.h"
 
+#include "communication.h"
 #include "device_descriptor.h"
 
-//#define RELEASE_MODE
+//#define RELEASE_MODE    // enables watchdog and main phase PWM outputs
 
 
 // main device class that contains all the other classes
@@ -41,10 +46,21 @@ class device {
         sto Sto = sto(&logs); // safe torque off
         
         // create all modes
-        Mode* current_mode = nullptr; // pointer to the current mode
-
-        Mode PMSM_torque_control; // torque control mode for PMSM motor (TODO: implement this mode class)
         
+
+        //Mode Default_Mode = Mode(&logs, &Fans, &CurrentSense, &PhasePWM, &Sto, &UserIO, &Adc, comm_vars);
+        //resistance_calib_mode Resistance_Calib = resistance_calib_mode(&logs, &Fans, &CurrentSense, &PhasePWM, &Sto, &UserIO, &Adc, comm_vars);
+        //dc_voltage_mode DC_Voltage = dc_voltage_mode(&logs, &Fans, &CurrentSense, &PhasePWM, &Sto, &UserIO, &Adc, comm_vars);
+        //dc_current_mode DC_Current = dc_current_mode(&logs, &Fans, &CurrentSense, &PhasePWM, &Sto, &UserIO, &Adc, comm_vars);
+        foc_current_mode FOC_Current = foc_current_mode(&logs, &Fans, &CurrentSense, &PhasePWM, &Sto, &UserIO, &Adc, &comm_vars);
+        
+        //Mode PMSM_torque_control; // torque control mode for PMSM motor (TODO: implement this mode class)
+        
+        //Mode* current_mode = &Default_Mode; // pointer to the current mode
+        //Mode* current_mode = &Resistance_Calib; // pointer to the current mode
+        //Mode* current_mode = &DC_Voltage; // pointer to the current mode
+        //Mode* current_mode = &DC_Current; // pointer to the current mode
+        Mode* current_mode = &FOC_Current; // pointer to the current mode
 
         void update(); // low frequency update, called from SysTick_Handler
 
@@ -62,6 +78,33 @@ class device {
         void sysTick_init(); // initialize the system tick timer
 
         void startup_demo(); // run a startup demo to test all hardware
+
+
+
+        // setup flags for each interrupt
+        // it is best to use these flags to trigger events in the main loop,
+        // rather than calling functions directly from the interrupt handlers if possible
+
+        bool sysTick_flag = false; // flag set by the SysTick_Handler
+        void flagged_sysTick(); // called when the sysTick_flag is set
+
+        bool tim2_flag = false; // flag set by the TIM2_IRQHandler
+        void flagged_tim2(); // called when the tim2_flag is set
+
+        bool i2c1_ev_flag = false; // flag set by the I2C1_EV_IRQHandler
+        void flagged_i2c1_ev(); // called when the i2c1_ev_flag is set
+
+        bool i2c1_er_flag = false; // flag set by the I2C1_ER_IRQHandler
+        void flagged_i2c1_er(); // called when the i2c1_er_flag is set
+
+        bool dma2_stream0_flag = false; // flag set by the DMA2_Stream0_IRQHandler
+        void flagged_dma2_stream0(); // called when the dma2_stream0_flag is set
+
+        bool dma2_stream1_flag = false; // flag set by the DMA2_Stream1_IRQHandler
+        void flagged_dma2_stream1(); // called when the dma2_stream1_flag is set
+
+        bool tim1_up_tim10_flag = false; // flag set by the TIM1_UP_TIM10_IRQHandler
+        void flagged_tim1_up_tim10(); // called when the tim1_up_tim10_flag is set
         
 
     public: // interrupt handlers, every possible interrupt should be defined here

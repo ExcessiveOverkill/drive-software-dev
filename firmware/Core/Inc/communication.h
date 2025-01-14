@@ -39,6 +39,7 @@ class communication{
         uint8_t expected_tx_length = 4;   // 4 x 32bit words is the smallest possible packet
         uint8_t device_address = 255;
         
+        bool us_overflow = false;
         uint64_t microseconds = 0;
         bool timed_out = true;
         uint64_t last_valid_packet_time_us = 0;
@@ -67,6 +68,7 @@ class communication{
         int8_t verify_rx_packet();
         void interpret_rx_sequential_data();
         void interpret_rx_cyclic_data();
+        void calculate_rx_expected_size();
         void generate_tx_cyclic_data(); // prepares tx packet with device address and cyclic data
         void generate_tx_sequential_data(); // finalizes tx packet with sequential data and crc
 
@@ -83,6 +85,7 @@ class communication{
 
         controller_register_access_result controller_get_register(uint16_t raw_address, void* raw_value);
         controller_register_access_result controller_set_register(uint16_t raw_address, void* raw_value);
+        controller_register_access_result controller_set_register(uint16_t raw_address, void* raw_value, void* response);
 
 
         void timer_us_init(void);
@@ -95,6 +98,8 @@ class communication{
         uint32_t target_rx_period = 0;
         uint32_t allowed_period_error = 0;  // maximum syncronization error that will allow clock adjustment
         uint16_t pwm_timer_sync_offset_us = 0; // offset to sync pwm timer with controller
+
+        void reset_communication(void); // resets cylic configs and disables cyclic mode
         
 
 

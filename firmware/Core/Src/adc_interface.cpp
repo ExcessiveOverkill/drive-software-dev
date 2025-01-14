@@ -123,13 +123,11 @@ void adc_interface::init(){
 
     DMA2_Stream0->CR |= DMA_SxCR_TCIE;  // Trigger interrupt when transfer to memory is complete
 
+    NVIC_SetPriority(DMA2_Stream0_IRQn, 10); // Set DMA interrupt priority to low
     NVIC_EnableIRQ(DMA2_Stream0_IRQn);  // Configure NVIC for DMA Inturrpt
 
     DMA2_Stream0->CR |= DMA_SxCR_EN; // Enable DMA stream
     ADC1->CR2 |= ADC_CR2_ADON;  // turn on ADC
-
-    
-
 }
 
 /*!
@@ -158,6 +156,8 @@ void adc_interface::convert_data(){
     pfc_W_millivolts = ((raw_adc_data[2] >> 16 & 0xFFFF) * PFC_SENSE_DIVIDER * 3300) / 4095;
     
     dc_bus_millivolts = ((raw_adc_data[3] & 0xFFFF) * DC_BUS_SENSE_DIVIDER * 3300) / 4095;
+
+    // TODO: implement temperature sensors
 }
 
 /*!
@@ -185,6 +185,87 @@ void adc_interface::dma_interrupt_handler(){
 /*!
     \brief Get DC bus voltage
 */
-uint32_t adc_interface::get_dc_bus_millivolts(){
-    return dc_bus_millivolts;
+message_severities adc_interface::get_dc_bus_millivolts(uint32_t* millivolts){
+    *millivolts = dc_bus_millivolts;
+    return fault;
+}
+
+/*!
+    \brief Get phase U voltage
+*/
+message_severities adc_interface::get_phase_U_millivolts(uint32_t* millivolts){
+    *millivolts = phase_U_millivolts;
+    return fault;
+}
+
+/*!
+    \brief Get phase V voltage
+*/
+message_severities adc_interface::get_phase_V_millivolts(uint32_t* millivolts){
+    *millivolts = phase_V_millivolts;
+    return fault;
+}
+
+/*!
+    \brief Get phase W voltage
+*/
+message_severities adc_interface::get_phase_W_millivolts(uint32_t* millivolts){
+    *millivolts = phase_W_millivolts;
+    return fault;
+}
+
+/*!
+    \brief Get PFC phase U voltage
+*/
+message_severities adc_interface::get_pfc_U_millivolts(uint32_t* millivolts){
+    *millivolts = pfc_U_millivolts;
+    return fault;
+}
+
+/*!
+    \brief Get PFC phase V voltage
+*/
+message_severities adc_interface::get_pfc_V_millivolts(uint32_t* millivolts){
+    *millivolts = pfc_V_millivolts;
+    return fault;
+}
+
+/*!
+    \brief Get PFC phase W voltage
+*/
+message_severities adc_interface::get_pfc_W_millivolts(uint32_t* millivolts){
+    *millivolts = pfc_W_millivolts;
+    return fault;
+}
+
+/*!
+    \brief Get board temperature
+*/
+message_severities adc_interface::get_board_temp(int32_t* temp){
+    *temp = board_temp;
+    return fault;
+}
+
+/*!
+    \brief Get MCU temperature
+*/
+message_severities adc_interface::get_mcu_temp(int32_t* temp){
+    *temp = mcu_temp;
+    return fault;
+}
+
+/*!
+    \brief Get heatsink 1 temperature
+*/
+message_severities adc_interface::get_heatsink_1_temp(int32_t* temp){
+    *temp = heatsink_1_temp;
+    return fault;
+}
+
+/*!
+    \brief Get heatsink 2 temperature
+*/
+message_severities adc_interface::get_heatsink_2_temp(int32_t* temp){
+    *temp = heatsink_2_temp;
+    return fault;
 }

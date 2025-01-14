@@ -221,7 +221,8 @@ struct_vars["firmware_version"] = {
 }
 cyclic_read_address_start = None
 cyclic_write_address_start = None
-i = 0
+cyclic_enable_address = None
+i = 3
 for register_name, register_info in deviceDescriptor["registers"].items():
 
     if(register_info["var_type"] not in vars.keys()):      # catch bad variable types
@@ -238,6 +239,8 @@ for register_name, register_info in deviceDescriptor["registers"].items():
         cyclic_read_address_start = i
     if(register_name.startswith("cyclic_write_address_") and cyclic_write_address_start is None):
         cyclic_write_address_start = i
+    if(register_name == "enable_cyclic_data" and cyclic_enable_address is None):
+        cyclic_enable_address = i
 
     vars[register_info["var_type"]][register_name] = t
 
@@ -274,6 +277,7 @@ for name, data in struct_vars.items():
 
 deviceFileGen.define("CYCLIC_READ_ADDRESS_POINTER_START", cyclic_read_address_start)
 deviceFileGen.define("CYCLIC_WRITE_ADDRESS_POINTER_START", cyclic_write_address_start)
+deviceFileGen.define("CYCLIC_ENABLE_ADDRESS_POINTER", cyclic_enable_address)
 deviceFileGen.define("VAR_COUNT", len(pointers), "number of variables")
 deviceFileGen.array("static void*", "var_pointers", len(pointers), initValue=pointers, comment="pointers to all variables", newline=True)
 #fileGen.array("static const bool", "read_permissions", len(read_permissions), initValue=read_permissions, comment="read permissions for all variables")

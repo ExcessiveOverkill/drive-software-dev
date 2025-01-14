@@ -22,11 +22,11 @@ class sto{
 
         void init(void);
 
-        bool output_allowed(void);
+        message_severities output_allowed(bool* result);
 
-        void enable(void);
+        message_severities enable(void);
         void disable(void);
 
-        uint32_t check_fault(void);
+        message_severities check_fault(void);
 
 };

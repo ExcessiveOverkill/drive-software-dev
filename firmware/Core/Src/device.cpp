@@ -14,7 +14,10 @@ void device::init(){
  
     #ifdef RELEASE_MODE
         watchdog_init();
+        PhasePWM.release_mode();
     #endif
+
+    PhasePWM.release_mode();    // bypass safeties... only do this if testing with a low voltage current limited supply
 
     logs.init();
     // Initialize all the low level classes
@@ -31,17 +34,12 @@ void device::init(){
     logs.microseconds = Comm.micros;
     Comm.comm_vars = comm_vars;
     Comm.comm_var_pointers = comm_var_pointers;
+    UserIO.micros = Comm.micros;
 
-    // TODO: add watchdog timer to disable PWM if system is unresponsive
-
-    // short startup test
-    //startup_demo();
 
     // todo: get this from the controller
     Comm.set_sync_frequency(1000); // 1kHz sync frequency
     Comm.set_pwm_timer_sync_offset_us(0); // no offset
-
-    UserIO.set_led_state(0b1000, UserIO.blink_slow);    // signify device is on and running
 
     delay_ms(500); // wait for userIO to update
 
@@ -51,8 +49,8 @@ void device::init(){
     delay_ms(500); // wait for communication to update
     Comm.enable_resync = true; // enable resync
 
-    Sto.enable();
-    PhasePWM.enable();
+
+    current_mode->request_state(Mode::States::RUN);
     
 }
 
@@ -111,8 +109,8 @@ void device::delay_ms(uint32_t time_ms){
 
 void device::sysTick_init(){
     SysTick->LOAD = ((SYSCLK*1e6) / SYSTICK_FREQUENCY) - 1; // Set the SysTick timer to count at the desired frequency
+    NVIC_SetPriority(USART6_IRQn, 15);  // low priority
     NVIC_EnableIRQ(SysTick_IRQn); // Enable the SysTick interrupt
-    NVIC_SetPriority(USART6_IRQn, 6);
     SysTick->CTRL = 0b111;	// Enable counter, interrupt, and set clock source to system clock
 }
 
@@ -143,20 +141,48 @@ void device::startup_demo(){
 }
 
 void device::run(){
-    while(1){
-        // Run the main loop
+    while(1){   // main loop
+
+        // run flag interrupt handlers
+        if(sysTick_flag){
+            flagged_sysTick();
+        }
+        if(tim2_flag){
+            flagged_tim2();
+        }
+        if(i2c1_ev_flag){
+            flagged_i2c1_ev();
+        }
+        if(i2c1_er_flag){
+            flagged_i2c1_er();
+        }
+        if(dma2_stream0_flag){
+            flagged_dma2_stream0();
+        }
+        if(dma2_stream1_flag){
+            flagged_dma2_stream1();
+        }
+        if(tim1_up_tim10_flag){
+            flagged_tim1_up_tim10();
+        }
+
+        // run additional mode functions
+        current_mode->default_run();
+        current_mode->run();
+        UserIO.run();
+
     }
 }
 
 void device::update(){
-    // TODO: Add low frequency update code
-
-    volatile uint32_t speed = comm_vars->fan_speed_cmd;
-
     Fans.set_speed(Fans.max_rpm*vars.fan_speed_cmd/0xffff);
+    vars.fan_speed_measured = uint16_t(Fans.get_fan_1_speed_rpm() + Fans.get_fan_2_speed_rpm())/2;
+
+    uint32_t dc_mv;
+    Adc.get_dc_bus_millivolts(&dc_mv);
+    vars.dc_bus_voltage = dc_mv/1000;
 
     update_leds();
-    watchdog_reload();
 }
 
 void device::update_leds(){
@@ -167,56 +193,120 @@ void device::update_leds(){
     else{
         UserIO.set_led_state(0b0001, UserIO.blink_slow);
     }
+
+    if(PhasePWM.is_enabled()){
+        UserIO.set_led_state(0b0010, UserIO.on);
+    }
+    else{
+        UserIO.set_led_state(0b0010, UserIO.off);
+    }
+
+    bool sto_good;
+    Sto.output_allowed(&sto_good);
+    if(sto_good){
+        UserIO.set_led_state(0b0100, UserIO.on);
+    }
+    else{
+        UserIO.set_led_state(0b0100, UserIO.off);
+    }
 }
 
 void device::critical_shutdown(){
     // Disable all hardware and enter a safe state
-    UserIO.set_led_state(0b1111, UserIO.blink_fast);
+    UserIO.set_led_state(0b1000, UserIO.blink_fast);
     Fans.set_speed(Fans.max_rpm);
 
-    // TODO: Add more shutdown procedures
+    PhasePWM.disable();
 }
 
 void device::SysTick_Handler(void){
+    sysTick_flag = true;
+}
+
+void device::flagged_sysTick(void){
     Fans.SysTick_Handler();
     UserIO.SysTick_Handler();
 
     update();
-    
+
+    current_mode->default_systick_handler();
+    current_mode->systick_handler();
+
+    sysTick_flag = false;
 }
 
 void device::TIM2_IRQHandler(void){
+    TIM2->SR &= ~TIM_SR_UIF; // Clear the update interrupt flag
+    tim2_flag = true;
+}
+
+void device::flagged_tim2(void){
     Comm.TIM2_IRQHandler();
+    tim2_flag = false;
 }
 
 void device::I2C1_EV_IRQHandler(void){
-    UserIO.I2C1_EV_IRQHandler();
+    //UserIO.I2C1_EV_IRQHandler();    // TODO: make this able to run from the flag handler
+    i2c1_ev_flag = true;
+}
+
+void device::flagged_i2c1_ev(void){
+    i2c1_ev_flag = false;
 }
 
 void device::I2C1_ER_IRQHandler(void){
-    UserIO.I2C1_ER_IRQHandler();
+    //UserIO.I2C1_ER_IRQHandler();    // TODO: make this able to run from the flag handler
+    i2c1_er_flag = true;
+}
+
+void device::flagged_i2c1_er(void){
+    i2c1_er_flag = false;
 }
 
 void device::DMA2_Stream0_IRQHandler(void){
+    if(DMA2->LISR & DMA_LISR_TCIF0){
+        DMA2->LIFCR |= DMA_LIFCR_CTCIF0;    // clear trasfer finished flag
+    }
+    dma2_stream0_flag = true;
+}
+
+void device::flagged_dma2_stream0(void){
+    dma2_stream0_flag = false;
     Adc.dma_interrupt_handler();
 }
 
 void device::DMA2_Stream1_IRQHandler(void){
     Comm.dma_stream1_interrupt_handler();
+    dma2_stream1_flag = true;
+}
+
+void device::flagged_dma2_stream1(void){
+    dma2_stream1_flag = false;
 }
 
 void device::TIM1_UP_TIM10_IRQHandler(void){
-    
-    // TODO: Add TIM1_UP_TIM10_IRQHandler code
+    // called at 2x the PWM frequency (each time the counter changes direction)
+
     if (TIM1->SR & TIM_SR_UIF) { // Check if update interrupt flag is set
         TIM1->SR &= ~TIM_SR_UIF; // Clear update interrupt flag
+        tim1_up_tim10_flag = true;
+    }
+}
+
+void device::flagged_tim1_up_tim10(void){
+    current_mode->default_tim1_up_irq_handler();
+    current_mode->tim1_up_irq_handler();
+
+    if(logs.get_active_severity() == message_severities::critical){
+        critical_shutdown();
     }
 
     Comm.update_timeout();
     watchdog_reload();
+    tim1_up_tim10_flag = false;
 }
 
-void device::USART6_IRQHandler(void){
+void device::USART6_IRQHandler(void){   // this handler is not flagged since it needs to be called immediately to ensure lowest jitter
     Comm.usart6_interrupt_handler();
 }
 

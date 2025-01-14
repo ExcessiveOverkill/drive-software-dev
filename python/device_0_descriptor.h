@@ -5,7 +5,7 @@
 
     // do not manually modify this file, modify the "device_descriptor.yaml" associated with the device firmware instead
 
-    // last updated at 2024-12-23 17:04:32.738881
+    // last updated at 2025-01-04 17:37:27.252535
 
     #pragma once
     #include <stdint.h>

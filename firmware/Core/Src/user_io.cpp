@@ -44,24 +44,12 @@ void user_io::init(void){
 	//TRISE = Maximum_Rise_Time / Peripheral_Clock_1_Period + 1
 	// 51   =       1000ns      /            20ns           + 1
 
+    I2C1->FLTR |= 15 << I2C_FLTR_DNF_Pos;	// Set Digital Noise Filter to 15 (maximum)
+
 	I2C1->CR1 |= (1 << I2C_CR1_PE_Pos) & I2C_CR1_PE_Msk;	// Enable I2C1 Peripheral
 
-	I2C1->CR2 |= I2C_CR2_ITEVTEN | I2C_CR2_ITBUFEN | I2C_CR2_ITERREN;	// Enable I2C1 Interrupts
-
-	NVIC_EnableIRQ(I2C1_EV_IRQn);	// Configure NVIC for I2C1 Event Inturrpt
-    NVIC_EnableIRQ(I2C1_ER_IRQn);	// Configure NVIC for I2C1 Error Inturrpt
-
-    update_step = done;    // enter idle state
-}
-
-
-/*!
-    \brief Check for errors related to reading/writing to the IO expander
-    
-    \return Error value, zero means no error
-*/
-uint32_t user_io::get_errors(void){
-    return error;
+    update_step = idle;    // enter idle state
+    increment_update_step();    // start the update cycle
 }
 
 
@@ -108,54 +96,16 @@ void user_io::set_led_state(uint32_t led_select_, uint32_t led_mode_){
 */
 void user_io::SysTick_Handler(void){
 
-    if(error){  // reset I2C if it gets stuck in an error state
-        I2C1->CR1 |= I2C_CR1_SWRST;	// Reset I2C
-        I2C1->CR1 &= ~I2C_CR1_SWRST;
-        
-        I2C1->CR2 |= (50 << I2C_CR2_FREQ_Pos) & I2C_CR2_FREQ_Msk;	// Set I2C1 Peripheral Clock Frequency to 50MHz
-	
-        // I2C1->CCR = (1 << I2C_CCR_FS_Pos) & I2C_CCR_FS_Msk;	// Set I2C1 Fast/Standard mode to Fast Mode
-        I2C1->CCR |= (250 << I2C_CCR_CCR_Pos) & I2C_CCR_CCR_Msk;	// Set I2C1 Clock control register to 100kHz
-        // CCR = Peripheral_Clock_1 / (3 * SCL_Output_Frequency)
+    bool slow_blink = (*micros & (0b1 << 20)) != 0;    // ~0.25Hz
+    bool medium_blink = (*micros & (0b1 << 19)) != 0;    // ~1Hz
+    bool fast_blink = (*micros & (0b1 << 17)) != 0;    // ~4Hz
 
-        I2C1->TRISE |= (51 << I2C_TRISE_TRISE_Pos) & I2C_TRISE_TRISE_Msk;	//Set Maximum Rise Time to 1000ns
-        //TRISE = Maximum_Rise_Time / Peripheral_Clock_1_Period + 1
-        // 51   =       1000ns      /            20ns           + 1
-
-        I2C1->CR1 |= (1 << I2C_CR1_PE_Pos) & I2C_CR1_PE_Msk;	// Enable I2C1 Peripheral
-
-        I2C1->CR2 |= I2C_CR2_ITEVTEN | I2C_CR2_ITBUFEN | I2C_CR2_ITERREN;	// Enable I2C1 Interrupts
-    }
-
-    slow_blink_cycle_counter += update_period_ms;
-    medium_blink_cycle_counter += update_period_ms;
-    fast_blink_cycle_counter += update_period_ms;
-
-    // toggle blink state bits if their period has passed
-    if(slow_blink_cycle_counter >= slow_blink_time_ms){
-        blink_state ^= (1 << 1);
-        slow_blink_cycle_counter = 0;
-    }
-    if(medium_blink_cycle_counter >= medium_blink_time_ms){
-        blink_state ^= (1 << 2);
-        medium_blink_cycle_counter = 0;
-    }
-    if(fast_blink_cycle_counter >= fast_blink_time_ms){
-        blink_state ^= (1 << 3);
-        fast_blink_cycle_counter = 0;
-    }
+    blink_state = (slow_blink << 1) | (medium_blink << 2) | (fast_blink << 3) | (1 << 4);
 
     led_state = (blink_state & led_modes[0]) ? 1 : 0;
     led_state |= (blink_state & led_modes[1]) ? 1<<1 : 0;
     led_state |= (blink_state & led_modes[2]) ? 1<<2 : 0;
     led_state |= (blink_state & led_modes[3]) ? 1<<3 : 0;
-
-    if(update_step == done){
-        update_step = idle;
-
-        //I2C1->CR1 |= (1 << I2C_CR1_ACK_Pos);	// Enable I2C1 Acknowledge for reading data
-        increment_update_step();
-    }
 
 }
 
@@ -176,8 +126,8 @@ void user_io::i2c_write(uint8_t device_address_, uint8_t device_register_, uint8
     device_register = device_register_;
     register_data = register_data_;
 
-    I2C1->CR1 |= I2C_CR1_START;	// Send START condition
-    i2c_state = write_send_start_bit_wait;
+    //I2C1->CR1 |= I2C_CR1_START;	// Send START condition
+    i2c_state = i2c_states::write_send_start_bit_wait;
 }
 
 /*!
@@ -193,8 +143,8 @@ void user_io::i2c_read(uint8_t device_address_, uint8_t device_register_){
     device_address = device_address_;
     device_register = device_register_;
 
-    I2C1->CR1 |= I2C_CR1_START;	// Send START condition
-    i2c_state = read_send_start_bit_wait;
+    //I2C1->CR1 |= I2C_CR1_START;	// Send START condition
+    i2c_state = i2c_states::read_send_start_bit_wait;
 }
 
 
@@ -203,7 +153,7 @@ void user_io::i2c_read(uint8_t device_address_, uint8_t device_register_){
 */
 void user_io::increment_update_step(void){
     if(update_step < done) update_step++;
-    if(update_step == done) error = 0;
+    //if(update_step == done) error = 0;
 
     switch(update_step){
         case set_config0:
@@ -221,135 +171,114 @@ void user_io::increment_update_step(void){
         case get_input0:
             i2c_read(0x20, 0x00);
             break;
+
+        case done:
+            update_step = set_config0;
+            break;
     };
 }
 
 
-/*!
-    \brief handler for i2c event interrupts
-    \note this needs to be placed in `I2C1_EV_IRQHandler(void)`
-*/
-void user_io::I2C1_EV_IRQHandler(void){
 
-    volatile bool start_bit_sent = 0;
-    volatile bool address_sent = 0;
-    volatile bool stop_bit_received = 0;
-    volatile bool data_byte_transfer_complete = 0;
-    volatile bool receive_buffer_not_empty = 0;
-    volatile bool transmit_buffer_empty = 0;
-    volatile bool addr_match = 0;
-
-	if (I2C1->SR1 & I2C_SR1_SB) {
-        start_bit_sent = 1;
-        I2C1->SR1 &= ~I2C_SR1_SB; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_ADDR) {
-        address_sent = 1;
-        (void) I2C1->SR2; // Clear the interrupt flag by reading SR2
-    }
-    if (I2C1->SR1 & I2C_SR1_ADDR) {
-        addr_match = 1;
-        I2C1->SR1 &= ~I2C_SR1_ADDR; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_STOPF) {
-        stop_bit_received = 1;
-        I2C1->CR1 |= I2C_CR1_PE; // Clear the STOPF flag by writing to CR1
-    }
-    if (I2C1->SR1 & I2C_SR1_BTF) {
-        data_byte_transfer_complete = 1;
-        I2C1->SR1 &= ~I2C_SR1_BTF; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_RXNE) {
-        receive_buffer_not_empty = 1;
-        I2C1->SR1 &= ~I2C_SR1_RXNE; // Clear the interrupt flag
-    }
-    if (I2C1->SR1 & I2C_SR1_TXE) {
-        transmit_buffer_empty = 1;
-        
-    }
-    
+void user_io::run(void){
 
     switch (i2c_state){
 
         // handle WRITE
-        case write_send_start_bit_wait:
-            if(start_bit_sent){
+        case i2c_states::write_send_start_bit_wait:
+            if(I2C1->CR1 & I2C_CR1_STOP){
+                break;
+            }
+            if(I2C1->SR1 & I2C_SR1_SB){ // Start bit sent
                 i2c_state++;    // move to next i2c state
                 I2C1->DR = (device_address << 1);	// Set I2C data to slave device address (write mode)
             }
-            break;
-
-        case write_send_device_address_wait:
-            if(transmit_buffer_empty){
-                i2c_state++;    // move to next i2c state
-                I2C1->DR = (device_register);	// Set I2C data to desired device register
+            else if(!(I2C1->CR1 & I2C_CR1_START) && !(I2C1->SR1 & I2C_SR1_SB)){ // this redundant check is to ensure issues don't arise from interrupts happening part way through
+                I2C1->CR1 |= I2C_CR1_START;
             }
             break;
 
-        case write_send_register_address_wait:
-            if(transmit_buffer_empty){
+        case i2c_states::write_send_device_address_wait:
+            if(I2C1->SR1 & I2C_SR1_ADDR){   // Address sent
+                (void)I2C1->SR2;    // Clear the addr flag by reading SR2
+                I2C1->DR = (device_register);	// Set I2C data to desired device register
+                i2c_state++;    // move to next i2c state
+            }
+            // else if(I2C1->SR1 & I2C_SR1_AF){    // Acknowledge failure
+            //     I2C1->CR1 |= I2C_CR1_STOP;	// Send STOP condition
+            //     i2c_state = write_send_start_bit_wait;  // reset state
+            // }
+            break;
+
+        case i2c_states::write_send_register_address_wait:
+            if(I2C1->SR1 & I2C_SR1_TXE){    // Transmit buffer empty
                 i2c_state++;    // move to next i2c state
                 I2C1->DR = (register_data);	// Set I2C data to desired register data
             }
             break;
 
-        case write_send_register_data_wait:
-            if(transmit_buffer_empty){
-                i2c_state++;    // move to next i2c state
+        case i2c_states::write_send_register_data_wait:
+            if(I2C1->SR1 & I2C_SR1_TXE){    // Transmit buffer empty
+                i2c_state = i2c_states::done;
                 I2C1->CR1 |= I2C_CR1_STOP;	// Send STOP condition
-                increment_update_step();
             }
             break;
 
-
         // handle READ
-        case read_send_start_bit_wait:
-            if(start_bit_sent){
+        case i2c_states::read_send_start_bit_wait:
+            if(I2C1->CR1 & I2C_CR1_STOP){
+                break;
+            }
+            if(I2C1->SR1 & I2C_SR1_SB){ // Start bit sent
                 i2c_state++;    // move to next i2c state
                 I2C1->DR = (device_address << 1);	// Set I2C data to slave device address (write mode)
             }
+            else if(!(I2C1->CR1 & I2C_CR1_START) && !(I2C1->SR1 & I2C_SR1_SB)){ // this redundant check is to ensure issues don't arise from interrupts happening part way through
+                I2C1->CR1 |= I2C_CR1_START;
+            }
             break;
 
-        case read_send_device_address_wait:
-            if(transmit_buffer_empty){
-                i2c_state++;    // move to next i2c state
+        case i2c_states::read_send_device_address_wait:
+            if(I2C1->SR1 & I2C_SR1_ADDR){   // Address sent
+                (void)I2C1->SR2;    // Clear the addr flag by reading SR2
                 I2C1->DR = (device_register);	// Set I2C data to desired device register
+                i2c_state++;    // move to next i2c state
             }
             break;
         
-        case read_send_register_address_wait:
-            if(transmit_buffer_empty){
+        case i2c_states::read_send_register_address_wait:
+            if(I2C1->SR1 & I2C_SR1_TXE){    // Transmit buffer empty
                 i2c_state++;    // move to next i2c state
-                I2C1->CR1 |= I2C_CR1_START;     // Set repeat START state
+                I2C1->CR1 |= I2C_CR1_START;	// Send REPEATED START condition
             }
             break;
 
-        case read_send_repeat_start_bit_wait:
-            if(start_bit_sent){
+        case i2c_states::read_send_repeat_start_bit_wait:
+            if(I2C1->SR1 & I2C_SR1_SB){
                 i2c_state++;    // move to next i2c state
                 I2C1->DR = (device_address << 1) | 0b1;	// Set I2C data to slave device address (read mode)
             }
             break;
 
-        case read_send_repeat_device_address_wait:
-            if(receive_buffer_not_empty){   // TODO: figure out why this is not being set automatically
+        case i2c_states::read_send_repeat_device_address_wait:
+            if(I2C1->SR1 & I2C_SR1_ADDR){   // address sent
+                (void)I2C1->SR2;    // Clear the addr flag by reading SR2
+                I2C1->CR1 &= ~I2C_CR1_ACK;	// Disable ACK since we only want one byte
+                I2C1->CR1 |= I2C_CR1_STOP;    // Send STOP condition after this byte
                 i2c_state++;    // move to next i2c state
-                I2C1->CR1 |= I2C_CR1_STOP;	// Send STOP condition
-                switch_state = I2C1->DR >> 4;
-                increment_update_step();
             }
             break;
 
+        case i2c_states::read_receive_data_wait:
+            if(I2C1->SR1 & I2C_SR1_RXNE){    // Receive buffer not empty
+                i2c_state = i2c_states::done;
+                switch_state = I2C1->DR >> 4;                
+            }
+            break;
+
+        case i2c_states::done:
+            increment_update_step();
+            break;
     }
 
-    
-}
-
-
-/*!
-    \brief handler for i2c error interrupts
-    \note this needs to be placed in `I2C1_ER_IRQHandler(void)`
-*/
-void user_io::I2C1_ER_IRQHandler(void){
-    error = 1;  //TODO: add support for more error states
 }

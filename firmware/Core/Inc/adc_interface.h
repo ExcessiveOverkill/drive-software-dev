@@ -25,6 +25,8 @@ class adc_interface{
 
         logging* logs;
 
+        message_severities fault = message_severities::none;
+
         uint32_t raw_adc_data[8];   // ADC data is packed from 16bit to 32bit and 16 samples are stored
 
         uint32_t phase_U_millivolts = 0;
@@ -43,8 +45,6 @@ class adc_interface{
         int32_t heatsink_2_temp = 0;  // temp is in 0.001 deg C
 
         uint32_t gate_supply_millivolts = 0;    // not implemented in hardware
-
-        void convert_data(void);
         
     public:
         adc_interface(logging* logs);
@@ -53,26 +53,24 @@ class adc_interface{
 
         void start_sample(void);
 
-        void dma_interrupt_handler            (void);
+        void convert_data(void);
 
-        uint32_t get_phase_U_millivolts(void);
-        uint32_t get_phase_V_millivolts(void);
-        uint32_t get_phase_W_millivolts(void);
+        void dma_interrupt_handler(void);
 
-        uint32_t get_pfc_U_millivolts(void);
-        uint32_t get_pfc_V_millivolts(void);
-        uint32_t get_pfc_W_millivolts(void);
+        message_severities get_phase_U_millivolts(uint32_t* millivolts);
+        message_severities get_phase_V_millivolts(uint32_t* millivolts);
+        message_severities get_phase_W_millivolts(uint32_t* millivolts);
 
-        uint32_t get_dc_bus_millivolts(void);
+        message_severities get_pfc_U_millivolts(uint32_t* millivolts);
+        message_severities get_pfc_V_millivolts(uint32_t* millivolts);
+        message_severities get_pfc_W_millivolts(uint32_t* millivolts);
+
+        message_severities get_dc_bus_millivolts(uint32_t* millivolts);
         
-        int32_t get_board_temp(void);
-        int32_t get_mcu_temp(void);
-        int32_t get_heatsink_1_temp(void);
-        int32_t get_heatsink_2_temp(void);
+        message_severities get_board_temp(int32_t* temp);
+        message_severities get_mcu_temp(int32_t* temp);
+        message_severities get_heatsink_1_temp(int32_t* temp);
+        message_severities get_heatsink_2_temp(int32_t* temp);
 
-        uint32_t get_gate_supply_millivolts(void);  // not implemented on hardware
-
-
-        uint32_t get_errors(void);
-
+        message_severities get_gate_supply_millivolts(uint32_t* millivolts);  // not implemented on hardware
 };
