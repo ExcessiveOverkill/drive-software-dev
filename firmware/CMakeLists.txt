@@ -99,18 +99,33 @@ target_link_options(${EXECUTABLE} PRIVATE
     -Wl,--print-memory-usage
 )
 
-# Generate device_descriptor.h using Python script
+# Path to the generated header
+set(GENERATED_HDR "${PROJ_PATH}/Core/Inc/device_descriptor.h")
+
+# Choose the Python interpreter inside the venv
+if(WIN32)
+    set(PYTHON_EXE ".venv/Scripts/python")
+else()
+    set(PYTHON_EXE ".venv/bin/python")
+endif()
+
+# Rule: how to create the header
 add_custom_command(
-    OUTPUT ${PROJ_PATH}/Core/Inc/device_descriptor.h
-    COMMAND .venv/Scripts/python autoGen.py
+    OUTPUT  ${GENERATED_HDR}
+    COMMAND ${PYTHON_EXE} autogen.py          # runs inside WORKING_DIRECTORY
+    DEPENDS ${PROJ_PATH}/../python/device_descriptor.yaml
     WORKING_DIRECTORY ${PROJ_PATH}/../python
+    COMMENT "Generating device_descriptor.h"
+    VERBATIM
 )
 
-# Custom target to generate device_descriptor.h
-add_custom_target(generate_device_descriptor_h DEPENDS ${PROJ_PATH}/Core/Inc/device_descriptor.h)
+# Target that represents the generated file
+add_custom_target(generate_device_descriptor_h ALL
+                  DEPENDS ${GENERATED_HDR})
 
-# Make the main target depend on the custom target
+# Main target needs the header first
 add_dependencies(${PROJECT_NAME} generate_device_descriptor_h)
+
 
 # Execute post-build to print size
 add_custom_command(TARGET ${EXECUTABLE} POST_BUILD
