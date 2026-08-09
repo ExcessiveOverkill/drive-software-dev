@@ -39,11 +39,13 @@ class communication{
         uint8_t expected_tx_length = 4;   // 4 x 32bit words is the smallest possible packet
         uint8_t device_address = 255;
         
-        bool us_overflow = false;
+        volatile uint32_t timer_us_overflow_count = 0;
         uint64_t microseconds = 0;
         bool timed_out = true;
         uint64_t last_valid_packet_time_us = 0;
         const uint32_t timeout_limit_us = 10 * 1e3; // time between valid packets before timeout
+        uint64_t read_last_valid_packet_time_us(void);
+        void write_last_valid_packet_time_us(uint64_t time_us);
         void reset_timeout(void);
 
         // sequential data transfer

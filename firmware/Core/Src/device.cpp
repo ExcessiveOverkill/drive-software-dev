@@ -19,6 +19,13 @@ void device::init(){
 
     PhasePWM.release_mode();    // bypass safeties... only do this if testing with a low voltage current limited supply
 
+
+    micros = Comm.micros;
+    logs.microseconds = Comm.micros;
+    Comm.comm_vars = comm_vars;
+    Comm.comm_var_pointers = comm_var_pointers;
+    UserIO.micros = Comm.micros;
+
     logs.init();
     // Initialize all the low level classes
     Comm.init();
@@ -28,13 +35,6 @@ void device::init(){
     PhasePWM.init();
     Adc.init();
     Sto.init();
-
-
-    micros = Comm.micros;
-    logs.microseconds = Comm.micros;
-    Comm.comm_vars = comm_vars;
-    Comm.comm_var_pointers = comm_var_pointers;
-    UserIO.micros = Comm.micros;
 
 
     // todo: get this from the controller
@@ -236,12 +236,11 @@ void device::flagged_sysTick(void){
 }
 
 void device::TIM2_IRQHandler(void){
-    TIM2->SR &= ~TIM_SR_UIF; // Clear the update interrupt flag
+    Comm.TIM2_IRQHandler();
     tim2_flag = true;
 }
 
 void device::flagged_tim2(void){
-    Comm.TIM2_IRQHandler();
     tim2_flag = false;
 }
 

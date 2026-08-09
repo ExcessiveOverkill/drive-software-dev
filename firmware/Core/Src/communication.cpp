@@ -112,9 +112,28 @@ bool communication::is_ok(){
 	return !timed_out;
 }
 
+uint64_t communication::read_last_valid_packet_time_us(){
+	uint32_t irq_mask = __get_PRIMASK();
+	__disable_irq();
+	__DMB();
+	uint64_t time_us = last_valid_packet_time_us;
+	__DMB();
+	__set_PRIMASK(irq_mask);
+	return time_us;
+}
+
+void communication::write_last_valid_packet_time_us(uint64_t time_us){
+	uint32_t irq_mask = __get_PRIMASK();
+	__disable_irq();
+	__DMB();
+	last_valid_packet_time_us = time_us;
+	__DMB();
+	__set_PRIMASK(irq_mask);
+}
+
 void communication::update_timeout(){
 	// needs to be signed because the comm interrupt could fire part way through this function and result in a negative diff
-	int64_t diff = get_microseconds() - last_valid_packet_time_us;
+	int64_t diff = get_microseconds() - read_last_valid_packet_time_us();
 	if(diff > timeout_limit_us){
 		if(!timed_out){
 			//logs->add_log("Communication timeout", message_severities::warning);	// TODO: add a log message
@@ -201,21 +220,34 @@ void communication::resync_system(){
 }
 
 void communication::TIM2_IRQHandler(){
-	us_overflow = true;
+	if(TIM2->SR & TIM_SR_UIF){
+		TIM2->SR &= ~TIM_SR_UIF;
+		timer_us_overflow_count++;
+	}
 }
 
 uint64_t communication::get_microseconds(){
-	volatile uint64_t us_temp = microseconds & 0xFFFFFFFF00000000; // Clear the lower 32 bits of the microseconds counter
-	us_temp = us_overflow ? us_temp + 0x100000000 : us_temp;	// Add 2^32 to the microseconds counter if there was an overflow
-	us_overflow = false; // Clear the overflow flag
-	us_temp += (TIM2->CNT & 0xFFFFFFFF); // Add the current timer value to the microseconds counter
-    microseconds = us_temp; // copy to global variable
-    return microseconds;
+	uint32_t irq_mask = __get_PRIMASK();
+	__disable_irq();
+
+	uint32_t overflow_count = timer_us_overflow_count;
+	uint32_t counter = TIM2->CNT;
+
+	if(TIM2->SR & TIM_SR_UIF){
+		overflow_count++;
+		counter = TIM2->CNT;
+	}
+
+	uint64_t us_temp = (uint64_t(overflow_count) << 32) | counter;
+	microseconds = us_temp;
+
+	__set_PRIMASK(irq_mask);
+	return microseconds;
 }
 
 void communication::reset_timeout(){
 	timed_out = false;
-	last_valid_packet_time_us = get_microseconds();
+	write_last_valid_packet_time_us(get_microseconds());
 }
 
 void communication::enable_tx(){
